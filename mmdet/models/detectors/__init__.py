@@ -1,4 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
+from .adet import Adet
 from .atss import ATSS
 from .autoassign import AutoAssign
 from .base import BaseDetector
@@ -42,6 +43,7 @@ from .yolact import YOLACT
 from .yolo import YOLOV3
 from .yolof import YOLOF
 from .yolox import YOLOX
+from .ndet import Ndet
 
 __all__ = [
     'ATSS', 'BaseDetector', 'SingleStageDetector', 'TwoStageDetector', 'RPN',
@@ -52,5 +54,5 @@ __all__ = [
     'VFNet', 'DETR', 'TridentFasterRCNN', 'SparseRCNN', 'SCNet', 'SOLO',
     'DeformableDETR', 'AutoAssign', 'YOLOF', 'CenterNet', 'YOLOX',
     'TwoStagePanopticSegmentor', 'PanopticFPN', 'QueryInst', 'LAD', 'TOOD',
-    'MaskFormer', 'Mask2Former'
+    'MaskFormer', 'Mask2Former', 'Adet', 'Ndet'
 ]
