@@ -1,6 +1,6 @@
 _base_ = [
     '../_base_/datasets/coco_one_shot_detection.py',
-    '../_base_/schedules/schedule_2x.py',
+    # '../_base_/schedules/schedule_2x.py',
     # '../_base_/default_runtime.py'
 ]
 # model settings
@@ -77,17 +77,25 @@ model = dict(
         nms=dict(type='nms', iou_threshold=0.5),
         max_per_img=100),
 
-    # nms_cfg=dict(
-    #     class_agnostic=True,
-    #     batch_nms_cfg = dict(
-    #         iou_thr=0.5,
-    #     ),
-    #     max_per_img=100
-    # )
+    nms_cfg=dict(
+        class_agnostic=True,
+        batch_nms_cfg = dict(
+            iou_thr=0.5,
+        ),
+        max_per_img=100
+    )
 )
 
-optimizer = dict(type='SGD', lr=0.002, momentum=0.9, weight_decay=0.0001)
-checkpoint_config = dict(interval=1)
+# optimizer
+optimizer = dict(
+    type='AdamW',
+    lr=0.001,
+    weight_decay=0.0001)
+optimizer_config = dict(grad_clip=dict(max_norm=0.1, norm_type=2))
+# learning policy
+lr_config = dict(policy='step', step=[100])
+runner = dict(type='EpochBasedRunner', max_epochs=150)
+checkpoint_config = dict(interval=5)
 
 # yapf:disable
 log_config = dict(
@@ -101,10 +109,11 @@ log_config = dict(
 
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
+load_from = None
 resume_from = None
 workflow = [('train', 1)]
-evaluation = dict(jsonfile_prefix='results/adet_cvt13/',
-classwise=True, interval=1)
+evaluation = dict(jsonfile_prefix='results/adet_cvt13_150e/',
+classwise=True, interval=5)
 # disable opencv multithreading to avoid system being overloaded
 opencv_num_threads = 0
 # set multi-process start method as `fork` to speed up the training

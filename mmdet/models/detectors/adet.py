@@ -29,6 +29,8 @@ class Adet(SingleStageDetector):
             self.batch_nms_cfg = nms_cfg['batch_nms_cfg']
             self.do_nms = True
             self.max_per_img = nms_cfg['max_per_img']
+        else:
+            self.do_nms = False
 
     def forward_train(self,
                       img,

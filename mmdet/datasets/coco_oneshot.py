@@ -2,6 +2,7 @@
 import contextlib
 import io
 import itertools
+import json
 import logging
 import os.path
 import os.path as osp
@@ -62,9 +63,14 @@ class CocoOneShotDataset(CustomDataset):
                (95, 54, 80), (128, 76, 255), (201, 57, 1), (246, 0, 122),
                (191, 162, 208)]
 
-    def __init__(self, query_pipeline,split, average_num, **kwargs):
+    def __init__(self, query_pipeline, split, average_num, query_json=None, **kwargs):
         super().__init__( **kwargs)
-        self.class_anno_mapping = self.build_class_anno_mapping()
+        if self.test_mode and query_json is not None:
+            self.class_anno_mapping, self.imid_info_mapping_dict = self.build_query_bank_from_files(query_json)
+        else:
+            self.class_anno_mapping = self.build_class_anno_mapping()
+
+        self.query_json = query_json
         self.label2cat = {y:x for x,y in self.cat2label.items()}
         self.transform_pipeline = Compose(kwargs['pipeline'][:-1])
         # self.default_collect_pipeline = Compose([dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels'])])
@@ -78,11 +84,34 @@ class CocoOneShotDataset(CustomDataset):
         self.unknown_cats_labels = [cat for cat in range(0, 80) if cat % 4 == split]
 
 
+    def build_query_bank_from_files(self, query_json):
+
+        train_query_dict = json.load(open(query_json))
+
+        class_anno_mapping = {}
+        for item in train_query_dict['annotations']:
+            if item['bbox'][2] > 50 and item['bbox'][3] > 50 and item['iscrowd'] == 0:
+                if item['category_id'] not in class_anno_mapping:
+                    class_anno_mapping[item['category_id']] = [item]
+                else:
+                    class_anno_mapping[item['category_id']].append(item)
+        if len(class_anno_mapping.keys()) != len(self.CLASSES):
+            empty_class_id = set(self.cat_ids) - set(class_anno_mapping.keys())
+            empty_class_name = [self.CLASSES[self.cat2label[cid]] for cid in empty_class_id]
+            print('Empty classes', empty_class_name, 'after filtering')
+        imid_info_mapping_dict = {}
+        for im in train_query_dict['images']:
+            if im['id'] not in imid_info_mapping_dict:
+                im['filename'] = im['file_name']
+                imid_info_mapping_dict[im['id']] = im
+
+        return class_anno_mapping, imid_info_mapping_dict
 
 
     def build_class_anno_mapping(self):
 
         class_anno_mapping = {}
+
         for key, value in self.coco.anns.items():
             if value['bbox'][2] > 50 and value['bbox'][3] > 50 and value['iscrowd'] == 0:
                 if value['category_id'] not in class_anno_mapping:
@@ -114,9 +143,9 @@ class CocoOneShotDataset(CustomDataset):
         while query_data is None:
             query_anno = anno_list[random.randint(0, len(anno_list) - 1)]
             query_img_id = query_anno['image_id']
-            query_idx = self.img_ids.index(query_img_id)
+            # query_idx = self.img_ids.index(query_img_id)
 
-            query_data = self.prepare_query_img(query_anno, query_idx)
+            query_data = self.prepare_query_img(query_anno, query_img_id)
 
         data['query_img_metas'] = query_data['img_metas']
 
@@ -127,7 +156,7 @@ class CocoOneShotDataset(CustomDataset):
 
         return data
 
-    def prepare_query_img(self, query_anno, idx):
+    def prepare_query_img(self, query_anno, query_img_id):
         """Get training data and annotations after pipeline.
 
         Args:
@@ -138,10 +167,14 @@ class CocoOneShotDataset(CustomDataset):
                 introduced by pipeline.
         """
 
-        img_info = self.data_infos[idx]
+        if self.query_json is None:
+            img_info = self.coco.imgs[query_img_id]
+        else:
+            img_info = self.imid_info_mapping_dict[query_img_id]
+
         results = dict(img_info=img_info)
-        if self.proposals is not None:
-            results['proposals'] = self.proposals[idx]
+        # if self.proposals is not None:
+        #     results['proposals'] = self.proposals[idx]
         self.pre_pipeline(results)
         results['bbox'] = query_anno['bbox']
         query_res = self.query_pipeline(results)
@@ -226,9 +259,9 @@ class CocoOneShotDataset(CustomDataset):
             query_data_list = []
             for query_anno in query_list:
                 query_img_id = query_anno['image_id']
-                query_idx = self.img_ids.index(query_img_id)
-                query_data = self.prepare_query_img(query_anno, query_idx)
-                query_img = query_data['img'][0].unsqueeze(0)
+                # query_idx = self.img_ids.index(query_img_id)
+                query_data = self.prepare_query_img(query_anno, query_img_id)
+                query_img = query_data['img'].data.unsqueeze(0)
                 query_data_list.append(query_img)
             query_data_tensor = torch.cat(query_data_list, dim=0)
             per_class_query_imgs[c] = query_data_tensor

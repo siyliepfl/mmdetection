@@ -76,14 +76,14 @@ model = dict(
         score_thr=0.05,
         nms=dict(type='nms', iou_threshold=0.5),
         max_per_img=100),
-
-    nms_cfg=dict(
-        class_agnostic=True,
-        batch_nms_cfg = dict(
-            iou_thr=0.5,
-        ),
-        max_per_img=100
-    )
+    #
+    # nms_cfg=dict(
+    #     class_agnostic=True,
+    #     batch_nms_cfg = dict(
+    #         iou_thr=0.5,
+    #     ),
+    #     max_per_img=100
+    # )
 )
 
 # # optimizer
