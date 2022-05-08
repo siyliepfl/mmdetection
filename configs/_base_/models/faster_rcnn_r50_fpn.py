@@ -106,3 +106,69 @@ model = dict(
         # soft-nms is also supported for rcnn testing
         # e.g., nms=dict(type='soft_nms', iou_threshold=0.5, min_score=0.05)
     ))
+
+# # dataset settings
+# dataset_type = 'CocoDataset'
+# data_root = 'data/lvis/'
+# img_norm_cfg = dict(
+#     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
+#
+# data = dict(
+#     samples_per_gpu=2,
+#     workers_per_gpu=2,
+#     train=dict(
+#         type=dataset_type,
+#         ann_file=data_root + 'annotations/instances_train2017.json',
+#         img_prefix=data_root + 'train2017/',
+#         pipeline=train_pipeline),
+#     val=dict(
+#         type=dataset_type,
+#         ann_file=data_root + 'annotations/instances_val2017.json',
+#         img_prefix=data_root + 'val2017/',
+#         pipeline=test_pipeline),
+#     test=dict(
+#         type=dataset_type,
+#         ann_file=data_root + 'annotations/instances_val2017.json',
+#         img_prefix=data_root + 'val2017/',
+#         pipeline=test_pipeline))
+#
+#
+# img_norm_cfg = dict(
+#     mean=[102.9801, 115.9465, 122.7717], std=[1.0, 1.0, 1.0], to_rgb=False)
+# train_pipeline = [
+#     # dict(type='LoadImageFromFile'),
+#     dict(
+#         type='LoadImageFromFile',
+#         file_client_args=dict(
+#             img_db_path='data/lvis/train_imgs.hdf5',
+#             backend='hdf5',
+#             type='lvis')),
+#     dict(type='LoadAnnotations', with_bbox=True),
+#     dict(type='Resize', img_scale=(640, 640), keep_ratio=True),
+#     dict(type='RandomFlip', flip_ratio=0.5),
+#     dict(type='Normalize', **img_norm_cfg),
+#     dict(type='Pad', size_divisor=32),
+#     dict(type='DefaultFormatBundle'),
+#     dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels']),
+# ]
+#
+# test_pipeline = [
+#     dict(
+#         type='LoadImageFromFile',
+#         file_client_args=dict(
+#             img_db_path='data/lvis/val2017.h5',
+#             backend='hdf5',
+#             type='lvis')),
+#     dict(
+#         type='MultiScaleFlipAug',
+#         img_scale=(640, 640),
+#         flip=False,
+#         transforms=[
+#             dict(type='Resize', keep_ratio=True),
+#             dict(type='RandomFlip'),
+#             dict(type='Normalize', **img_norm_cfg),
+#             dict(type='Pad', size_divisor=32),
+#             dict(type='ImageToTensor', keys=['img']),
+#             dict(type='Collect', keys=['img']),
+#         ])
+# ]

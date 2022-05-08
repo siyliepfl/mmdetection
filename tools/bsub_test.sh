@@ -30,4 +30,4 @@ echo bsub -n ${CORE} -W $TIME:00 -J "${NAME}" -oo "${NAME}${LOG}" \
 bsub -n ${CORE} -W $TIME:00 -J $NAME -oo $NAME$LOG \
     -R "rusage[mem=${MEM}, ngpus_excl_p=${GPUS}]" \
     -R "select[gpu_model0==${GPUN}]" \
-    "PORT=${PORT}./tools/dist_test.sh ${CONFIG} ${CHECKPOINT} ${GPUS} ${COMMAND}"
+    "PORT=${PORT} ./tools/dist_test.sh ${CONFIG} ${CHECKPOINT} ${GPUS} ${COMMAND}"

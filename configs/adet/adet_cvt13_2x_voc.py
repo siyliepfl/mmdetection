@@ -1,6 +1,6 @@
 _base_ = [
-    '../_base_/datasets/coco_one_shot_detection.py',
-    '../_base_/schedules/schedule_1x.py',
+    '../_base_/datasets/voc_one_shot_detection.py',
+    '../_base_/schedules/schedule_2x.py',
     # '../_base_/default_runtime.py'
 ]
 # model settings
@@ -73,7 +73,7 @@ model = dict(
     test_cfg=dict(
         nms_pre=1000,
         min_bbox_size=0,
-        score_thr=0.05,
+        score_thr=0.3,
         nms=dict(type='nms', iou_threshold=0.5),
         max_per_img=100),
 
@@ -103,8 +103,7 @@ dist_params = dict(backend='nccl')
 log_level = 'INFO'
 resume_from = None
 workflow = [('train', 1)]
-evaluation = dict(jsonfile_prefix='results/adet_cvt13/',
-classwise=True, interval=1)
+evaluation = dict(interval=1)
 # disable opencv multithreading to avoid system being overloaded
 opencv_num_threads = 0
 # set multi-process start method as `fork` to speed up the training

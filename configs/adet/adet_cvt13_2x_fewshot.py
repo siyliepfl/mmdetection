@@ -1,6 +1,6 @@
 _base_ = [
-    '../_base_/datasets/coco_one_shot_detection.py',
-    '../_base_/schedules/schedule_1x.py',
+    '../_base_/datasets/coco_few_shot_detection.py',
+    '../_base_/schedules/schedule_2x.py',
     # '../_base_/default_runtime.py'
 ]
 # model settings
@@ -77,13 +77,13 @@ model = dict(
         nms=dict(type='nms', iou_threshold=0.5),
         max_per_img=100),
 
-    # nms_cfg=dict(
-    #     class_agnostic=True,
-    #     batch_nms_cfg = dict(
-    #         iou_thr=0.5,
-    #     ),
-    #     max_per_img=100
-    # )
+    nms_cfg=dict(
+        class_agnostic=True,
+        batch_nms_cfg = dict(
+            iou_thr=0.5,
+        ),
+        max_per_img=300
+    )
 )
 
 optimizer = dict(type='SGD', lr=0.002, momentum=0.9, weight_decay=0.0001)

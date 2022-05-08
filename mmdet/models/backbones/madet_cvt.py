@@ -18,7 +18,6 @@ from torch import nn
 from ..builder import BACKBONES
 
 
-
 # From PyTorch internals
 def _ntuple(n):
     def parse(x):
@@ -44,12 +43,8 @@ class LayerNorm(nn.LayerNorm):
         ret = super().forward(x.type(torch.float32))
         return ret.type(orig_type)
 
-@ACTIVATION_LAYERS.register_module()
-class QuickGELU(BaseModule):
-    def forward(self, x: torch.Tensor):
-        return x * torch.sigmoid(1.702 * x)
 
-@NORM_LAYERS.register_module()
+
 class FrozenBatchNorm2d(BaseModule):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
@@ -204,66 +199,68 @@ class Attention(BaseModule):
 
         return proj
 
-    def forward_conv(self, x, t_h, t_w, s_h, s_w):
+    def forward_conv(self, x, n_templates, t_h, t_w, s_h, s_w):
 
-        template, search = torch.split(x, [t_h * t_w, s_h * s_w], dim=1)
-        template = rearrange(template, 'b (h w) c -> b c h w', h=t_h, w=t_w).contiguous()
+        feature_bank = torch.split(x,  n_templates * [t_h * t_w] + [s_h * s_w], dim=1)
+        feature_bank = list(feature_bank)
+        template_list = feature_bank[:-1]
+        search = feature_bank[-1]
+        for i, template in enumerate(template_list):
+            template_list[i] = rearrange(template, 'b (h w) c -> b c h w', h=t_h, w=t_w).contiguous()
         search = rearrange(search, 'b (h w) c -> b c h w', h=s_h, w=s_w).contiguous()
 
         if self.conv_proj_q is not None:
-            t_q = self.conv_proj_q(template)
+            t_q_list = []
+            for i, template in enumerate(template_list):
+                t_q = self.conv_proj_q(template)
+                t_q_list.append(t_q)
+
             s_q = self.conv_proj_q(search)
-            q = torch.cat([t_q, s_q], dim=1)
+            q = torch.cat(t_q_list + [s_q], dim=1)
         else:
-            t_q = rearrange(template, 'b c h w -> b (h w) c').contiguous()
+            t_q_list = []
+            for i, template in enumerate(template_list):
+                t_q = rearrange(template, 'b c h w -> b (h w) c').contiguous()
+                t_q_list.append(t_q)
+
             s_q = rearrange(search, 'b c h w -> b (h w) c').contiguous()
-            q = torch.cat([t_q, s_q], dim=1)
+            q = torch.cat( t_q_list + [s_q], dim=1)
 
         if self.conv_proj_k is not None:
-            t_k = self.conv_proj_k(template)
+            t_k_list = []
+            for i, template in enumerate(template_list):
+                t_k = self.conv_proj_k(template)
+                t_k_list.append(t_k)
             s_k = self.conv_proj_k(search)
-            k = torch.cat([t_k, s_k], dim=1)
+            k = torch.cat(t_k_list + [s_k], dim=1)
         else:
-            t_k = rearrange(template, 'b c h w -> b (h w) c').contiguous()
+            t_k_list = []
+            for i, template in enumerate(template_list):
+                t_k = rearrange(template, 'b c h w -> b (h w) c').contiguous()
+                t_k_list.append(t_k)
+
             s_k = rearrange(search, 'b c h w -> b (h w) c').contiguous()
-            k = torch.cat([t_k, s_k], dim=1)
+            k = torch.cat(t_k_list + [s_k], dim=1)
 
         if self.conv_proj_v is not None:
-            t_v = self.conv_proj_v(template)
+            t_v_list = []
+            for i, template in enumerate(template_list):
+                t_v = self.conv_proj_v(template)
+                t_v_list.append(t_v)
             s_v = self.conv_proj_v(search)
-            v = torch.cat([t_v, s_v], dim=1)
+            v = torch.cat(t_v_list + [s_v], dim=1)
         else:
-            t_v = rearrange(template, 'b c h w -> b (h w) c').contiguous()
+            t_v_list = []
+            for i, template in enumerate(template_list):
+                t_v = rearrange(template, 'b c h w -> b (h w) c').contiguous()
+                t_v_list.append(t_v)
+
             s_v = rearrange(search, 'b c h w -> b (h w) c').contiguous()
-            v = torch.cat([t_v, s_v], dim=1)
+            v = torch.cat(t_v_list + [s_v], dim=1)
 
         return q, k, v
 
-    def forward_conv_test(self, x, s_h, s_w):
-        search = x
-        search = rearrange(search, 'b (h w) c -> b c h w', h=s_h, w=s_w).contiguous()
-
-        if self.conv_proj_q is not None:
-            q = self.conv_proj_q(search)
-        else:
-            q = rearrange(search, 'b c h w -> b (h w) c').contiguous()
-
-        if self.conv_proj_k is not None:
-            k = self.conv_proj_k(search)
-        else:
-            k = rearrange(search, 'b c h w -> b (h w) c').contiguous()
-        k = torch.cat([self.t_k, self.ot_k, k], dim=1)
-
-        if self.conv_proj_v is not None:
-            v = self.conv_proj_v(search)
-        else:
-            v = rearrange(search, 'b c h w -> b (h w) c').contiguous()
-        v = torch.cat([self.t_v, self.ot_v, v], dim=1)
-
-        return q, k, v
-
-
-    def forward(self, x, t_h, t_w, s_h, s_w):
+    def forward(self, x, n_templates, t_h, t_w, s_h, s_w):
         """
         Asymmetric mixed attention.
         """
@@ -272,7 +269,7 @@ class Attention(BaseModule):
             or self.conv_proj_k is not None
             or self.conv_proj_v is not None
         ):
-            q, k, v = self.forward_conv(x, t_h, t_w, s_h, s_w)
+            q, k, v = self.forward_conv(x, n_templates, t_h, t_w, s_h, s_w)
 
         q = rearrange(self.proj_q(q), 'b t (h d) -> b h t d', h=self.num_heads).contiguous()
         k = rearrange(self.proj_k(k), 'b t (h d) -> b h t d', h=self.num_heads).contiguous()
@@ -280,18 +277,23 @@ class Attention(BaseModule):
 
 
         ### Attention!: k/v compression，1/4 of q_size（conv_stride=2）
-        q_mt, q_s = torch.split(q, [t_h * t_w , s_h * s_w], dim=2)
+        q_mt, q_s = torch.split(q, [n_templates * t_h * t_w , s_h * s_w], dim=2)
         # k_t, k_ot, k_s = torch.split(k, [t_h*t_w//4, t_h*t_w//4, s_h*s_w//4], dim=2)
         # v_t, v_ot, v_s = torch.split(v, [t_h * t_w // 4, t_h * t_w // 4, s_h * s_w // 4], dim=2)
-        k_mt, k_s = torch.split(k, [((t_h + 1) // 2) ** 2 , s_h * s_w // 4], dim=2)
-        v_mt, v_s = torch.split(v, [((t_h + 1) // 2) ** 2 ,  s_h * s_w // 4], dim=2)
+        k_mt, k_s = torch.split(k, [n_templates * ((t_h + 1) // 2) ** 2 , s_h * s_w // 4], dim=2)
+        v_mt, v_s = torch.split(v, [n_templates * ((t_h + 1) // 2) ** 2 ,  s_h * s_w // 4], dim=2)
+
+        q_mt = rearrange(q_mt, 'b m (n h w) c -> b m n (h w) c', n=n_templates, h=t_h)
+        k_mt = rearrange(k_mt, 'b m (n l) c -> b m n l c', n=n_templates, l=((t_h + 1) // 2) ** 2)
+        v_mt = rearrange(v_mt, 'b m (n l) c -> b m n l c', n=n_templates, l=((t_h + 1) // 2) ** 2)
+
 
         # template attention
-        attn_score = torch.einsum('bhlk,bhtk->bhlt', [q_mt, k_mt]) * self.scale
+        attn_score = torch.einsum('bmnlk,bmntk->bmnlt', [q_mt, k_mt]) * self.scale
         attn = F.softmax(attn_score, dim=-1)
         attn = self.attn_drop(attn)
-        x_mt = torch.einsum('bhlt,bhtv->bhlv', [attn, v_mt])
-        x_mt = rearrange(x_mt, 'b h t d -> b t (h d)')
+        x_mt = torch.einsum('bmnlt,bmntv->bmnlv', [attn, v_mt])
+        x_mt = rearrange(x_mt, 'b m n t d -> b (n t) (m d)')
 
         # search region attention
         attn_score = torch.einsum('bhlk,bhtk->bhlt', [q_s, k]) * self.scale
@@ -371,24 +373,24 @@ class Block(BaseModule):
             drop=drop
         )
 
-    def forward(self, x, t_h, t_w, s_h, s_w):
+    def forward(self, x, n_templates, t_h, t_w, s_h, s_w):
         res = x
 
         x = self.norm1(x)
-        attn = self.attn(x, t_h, t_w, s_h, s_w)
+        attn = self.attn(x, n_templates, t_h, t_w, s_h, s_w)
         x = res + self.drop_path(attn)
         x = x + self.drop_path(self.mlp(self.norm2(x)))
 
         return x
 
-    def forward_test(self, x, s_h, s_w):
-        res = x
-
-        x = self.norm1(x)
-        attn = self.attn.forward_test(x, s_h, s_w)
-        x = res + self.drop_path(attn)
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
-        return x
+    # def forward_test(self, x, s_h, s_w):
+    #     res = x
+    #
+    #     x = self.norm1(x)
+    #     attn = self.attn.forward_test(x, s_h, s_w)
+    #     x = res + self.drop_path(attn)
+    #     x = x + self.drop_path(self.mlp(self.norm2(x)))
+    #     return x
 
 
 
@@ -525,35 +527,46 @@ class VisionTransformer(BaseModule):
             nn.init.constant_(m.bias, 0)
             nn.init.constant_(m.weight, 1.0)
 
-    def forward(self, template, search):
+    def forward(self, template_bank, search):
         """
-        :param template: (batch, c, 128, 128)
+        :param template_bank: (c, batch, n, 128, 128)
         :param search: (batch, c, 320, 320)
         :return:
         """
         # x = self.patch_embed(x)
         # B, C, H, W = x.size()
-        template = self.patch_embed(template)
+
+        # number of templates
+        n_templates = len(template_bank)
+        template_list = []
+        for i , template in enumerate(template_bank):
+            template = self.patch_embed(template)
+            template_list.append(template)
+
         t_B, t_C, t_H, t_W = template.size()
         search = self.patch_embed(search)
         s_B, s_C, s_H, s_W = search.size()
 
-        template = rearrange(template, 'b c h w -> b (h w) c').contiguous()
+        for i , template in enumerate(template_list):
+            template_list[i] = rearrange(template, 'b c h w -> b (h w) c').contiguous()
+
         search = rearrange(search, 'b c h w -> b (h w) c').contiguous()
-        x = torch.cat([template, search], dim=1)
+
+
+        x = torch.cat(template_list+[search], dim=1)
 
         x = self.pos_drop(x)
 
         for i, blk in enumerate(self.blocks):
-            x = blk(x, t_H, t_W, s_H, s_W)
+            x = blk(x, n_templates, t_H, t_W, s_H, s_W)
 
         # if self.cls_token is not None:
         #     cls_tokens, x = torch.split(x, [1, H*W], 1)
-        template, search = torch.split(x, [t_H*t_W, s_H*s_W], dim=1)
-        template = rearrange(template, 'b (h w) c -> b c h w', h=t_H, w=t_W).contiguous()
+        template_bank, search = torch.split(x, [n_templates * t_H * t_W, s_H*s_W], dim=1)
+        template_bank = rearrange(template_bank, 'b (n h w) c -> n b c h w', h=t_H, n=n_templates).contiguous()
         search = rearrange(search, 'b (h w) c -> b c h w', h=s_H, w=s_W).contiguous()
 
-        return template, search
+        return template_bank, search
 
     def forward_test(self, search):
         # x = self.patch_embed(x)
@@ -580,10 +593,11 @@ class VisionTransformer(BaseModule):
 
 
 @BACKBONES.register_module()
-class CvTAdet(BaseModule):
+class MultiCvTAdet(BaseModule):
     def __init__(self,
                  in_chans=3,
-                 # num_classes=1000,
+                 num_classes=80,
+                 template_hw=48,
                  act_layer=nn.GELU,
                  # norm_cfg=dict(type='ln', eps=1e-5,requires_grad=True),
                  init='trunc_norm',
@@ -592,7 +606,11 @@ class CvTAdet(BaseModule):
                  init_cfg=None,
                  ):
         super().__init__(init_cfg)
-        # self.num_classes = num_classes
+        self.num_classes = num_classes
+        self.template_hw = template_hw
+        # generate the learnable feature bank
+        self.template_embeds = nn.Embedding(self.num_classes,
+                                            embedding_dim=3 * self.template_hw ** 2)
 
         self.num_stages = num_stages
         for i in range(self.num_stages):
@@ -637,7 +655,7 @@ class CvTAdet(BaseModule):
         self.head = nn.Linear(dim_embed, 1000)
         trunc_normal_(self.head.weight, std=0.02)
 
-    def forward(self, template, search):
+    def forward(self, search):
         """
         :param template: (b, 3, 128, 128)
         :param search: (b, 3, 640, 640)
@@ -647,9 +665,16 @@ class CvTAdet(BaseModule):
         # search = search + self.search_emb
         template_list = []
         search_list = []
+        bs = search.shape[0]
+        template_bank = self.template_embeds.weight.repeat(bs, 1 , 1)
+        template_bank = rearrange(template_bank, 'b n (c h w) -> n b c h w',
+                                    h=self.template_hw,
+                                    b=bs,
+                                    c=3)
         for i in range(self.num_stages):
-            template, search = getattr(self, f'stage{i}')(template, search)
-            template_list.append(template)
+            template_bank, search = getattr(self, f'stage{i}')(template_bank, search)
+            # template_list.append(rearrange(template_bank,'n b c h w -> (n b) c h w'))
+            template_list.append(template_bank)
             search_list.append(search)
 
         return template_list, search_list

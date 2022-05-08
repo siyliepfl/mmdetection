@@ -86,16 +86,36 @@ model = dict(
     )
 )
 
-# optimizer
-optimizer = dict(
-    type='AdamW',
-    lr=0.001,
-    weight_decay=0.0001)
-optimizer_config = dict(grad_clip=dict(max_norm=0.1, norm_type=2))
-# learning policy
-lr_config = dict(policy='step', step=[100])
-runner = dict(type='EpochBasedRunner', max_epochs=150)
-checkpoint_config = dict(interval=5)
+# # optimizer
+# # default 8 gpu
+# optimizer = dict(
+#     type='SGD',
+#     lr=0.002,
+#     momentum=0.9,
+#     weight_decay=5e-4,
+#     nesterov=True,
+#     paramwise_cfg=dict(norm_decay_mult=0., bias_decay_mult=0.))
+# optimizer_config = dict(grad_clip=None)
+#
+# max_epochs = 300
+# num_last_epochs = 15
+# resume_from = None
+# interval = 10
+#
+# # learning policy
+# lr_config = dict(
+#     _delete_=True,
+#     policy='YOLOX',
+#     warmup='exp',
+#     by_epoch=False,
+#     warmup_by_epoch=True,
+#     warmup_ratio=1,
+#     warmup_iters=5,  # 5 epoch
+#     num_last_epochs=num_last_epochs,
+#     min_lr_ratio=0.05)
+#
+# runner = dict(type='EpochBasedRunner', max_epochs=max_epochs)
+# checkpoint_config = dict(interval=10)
 
 # yapf:disable
 log_config = dict(

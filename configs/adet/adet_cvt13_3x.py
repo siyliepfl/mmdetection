@@ -1,6 +1,6 @@
 _base_ = [
     '../_base_/datasets/coco_one_shot_detection.py',
-    '../_base_/schedules/schedule_1x.py',
+    # '../_base_/schedules/schedule_2x.py',
     # '../_base_/default_runtime.py'
 ]
 # model settings
@@ -87,8 +87,17 @@ model = dict(
 )
 
 optimizer = dict(type='SGD', lr=0.002, momentum=0.9, weight_decay=0.0001)
-checkpoint_config = dict(interval=1)
+optimizer_config = dict(grad_clip=None)
+# learning policy
+lr_config = dict(
+    policy='step',
+    warmup='linear',
+    warmup_iters=500,
+    warmup_ratio=0.001,
+    step=[25, 33])
+runner = dict(type='EpochBasedRunner', max_epochs=36)
 
+checkpoint_config = dict(interval=1)
 # yapf:disable
 log_config = dict(
     interval=50,

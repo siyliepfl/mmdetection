@@ -1,6 +1,6 @@
 _base_ = [
-    '../_base_/datasets/coco_one_shot_detection.py',
-    '../_base_/schedules/schedule_1x.py',
+    '../_base_/datasets/coco_few_shot_detection.py',
+    '../_base_/schedules/schedule_2x.py',
     # '../_base_/default_runtime.py'
 ]
 # model settings
@@ -16,7 +16,7 @@ model = dict(
         PATCH_PADDING= [2, 1, 1],
         DIM_EMBED= [64, 192, 384],
         NUM_HEADS= [1, 3, 6],
-        DEPTH= [1, 2, 10],
+        DEPTH= [1, 4, 16],
         MLP_RATIO= [4.0, 4.0, 4.0],
         ATTN_DROP_RATE= [0.0, 0.0, 0.0],
         DROP_RATE= [0.0, 0.0, 0.0],
@@ -76,7 +76,7 @@ model = dict(
         score_thr=0.05,
         nms=dict(type='nms', iou_threshold=0.5),
         max_per_img=100),
-
+    #
     # nms_cfg=dict(
     #     class_agnostic=True,
     #     batch_nms_cfg = dict(
@@ -86,9 +86,18 @@ model = dict(
     # )
 )
 
+# # optimizer
+# optimizer = dict(
+#     type='AdamW',
+#     lr=0.001,
+#     weight_decay=0.0001)
+# optimizer_config = dict(grad_clip=dict(max_norm=0.1, norm_type=2))
+# # learning policy
+# lr_config = dict(policy='step', step=[100])
+# runner = dict(type='EpochBasedRunner', max_epochs=150)
+
 optimizer = dict(type='SGD', lr=0.002, momentum=0.9, weight_decay=0.0001)
 checkpoint_config = dict(interval=1)
-
 # yapf:disable
 log_config = dict(
     interval=50,
@@ -101,13 +110,15 @@ log_config = dict(
 
 dist_params = dict(backend='nccl')
 log_level = 'INFO'
+load_from = None
 resume_from = None
 workflow = [('train', 1)]
-evaluation = dict(jsonfile_prefix='results/adet_cvt13/',
-classwise=True, interval=1)
+evaluation = dict(jsonfile_prefix='results/adet_cvt21/',
+classwise=True)
+
 # disable opencv multithreading to avoid system being overloaded
 opencv_num_threads = 0
 # set multi-process start method as `fork` to speed up the training
 mp_start_method = 'fork'
 find_unused_parameters = True
-load_from='saved_models/cvt_weights/CvT-13-384x384-IN-22k-backbone.pth'
+load_from='saved_models/cvt_weights/CvT-21-384x384-IN-22k-backbone.pth'

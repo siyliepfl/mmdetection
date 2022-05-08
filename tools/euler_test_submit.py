@@ -1,7 +1,7 @@
 import subprocess
 
 # define Euler related parameters
-gpu = '4'
+gpu = '2'
 time='4'
 mem = '8000'
 n_cores = '8'
@@ -9,9 +9,9 @@ n_cores = '8'
 
 # define task related parameters
 
-name = 'adet_cvt13_2x'
+name = 'TEST_adet_cvt13_2x'
 config= 'configs/adet/adet_cvt13_2x.py'
-checkpoint = 'saved_models/cvt_weights/CvT-13-384x384-IN-22k-backbone.pth'
+# checkpoint = 'saved_models/cvt_weights/CvT-13-384x384-IN-22k-backbone.pth'
 gpu_type = "NVIDIAGeForceRTX2080Ti"
 
 dataset = 'coco'
@@ -23,30 +23,29 @@ elif dataset == 'lvis':
 port=22222
 
 batch_size=2
-average_num = str(1)
+average_num = str(5)
 # lr=0.001
-split_list = [0, 1, 2, 3]
-
+split_list = [2, 3]
+classwise=True
 for i in split_list:
     split = str(i)
     one_shot_data = 'data/lvis/' + f'oneshot/train_split_{split}.txt'
     port_str = str(port)
     log_name = name + '_' + dataset +  '_split_' + split + '_average_num_'+str(average_num)
     json_prefix = 'results/'+ name + '_split_'+split
-    command = f" --work-dir saved_models/{log_name}/ " \
-              f"--cfg-options load_from={checkpoint} data.samples_per_gpu={batch_size} " \
-              f"evaluation.jsonfile_prefix={json_prefix} data.train.split={split} data.val.split={split} data.test.split={split} " \
-              f"data.train.average_num={average_num} data.val.average_num={average_num} data.test.average_num={average_num} " \
-              f"data.train.classes={one_shot_data} " \
-
+    checkpoint = f'saved_models/adet_cvt13_2x_coco_split_{split}_average_num_2/epoch_24.pth'
+    command = f"--tmpdir /scratch/{log_name}/ --eval bbox " \
+              f"--eval-options jsonfile_prefix={json_prefix} classwise={classwise} " \
+              f"--cfg-options data.test.split={split} " \
+              f"data.test.average_num={average_num} "
+              # f"data.test.classes={one_shot_data} " \
 
     process = subprocess.Popen(
-        ['./tools/bsub_train.sh', config, gpu, log_name, command, time, port_str, mem, n_cores, gpu_type],
+        ['./tools/bsub_test.sh', config,checkpoint, gpu, log_name, command, time, port_str,mem,n_cores,gpu_type],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         universal_newlines=True,
     )
-
     stdout, stderr = process.communicate()
     print(stdout)
     print(stderr)

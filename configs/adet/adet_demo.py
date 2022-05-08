@@ -16,7 +16,7 @@ model = dict(
         PATCH_PADDING= [2, 1, 1],
         DIM_EMBED= [64, 192, 384],
         NUM_HEADS= [1, 3, 6],
-        DEPTH= [1, 2, 10],
+        DEPTH= [1, 6, 14],
         MLP_RATIO= [4.0, 4.0, 4.0],
         ATTN_DROP_RATE= [0.0, 0.0, 0.0],
         DROP_RATE= [0.0, 0.0, 0.0],
@@ -77,13 +77,13 @@ model = dict(
         nms=dict(type='nms', iou_threshold=0.5),
         max_per_img=100),
 
-    nms_cfg=dict(
-        class_agnostic=True,
-        batch_nms_cfg = dict(
-            iou_thr=0.5,
-        ),
-        max_per_img=100
-    )
+    # nms_cfg=dict(
+    #     class_agnostic=True,
+    #     batch_nms_cfg = dict(
+    #         iou_thr=0.5,
+    #     ),
+    #     max_per_img=100
+    # )
 )
 
 # dataset settings
@@ -102,7 +102,7 @@ train_pipeline = [
     dict(type='LoadAnnotations', with_bbox=True),
     dict(type='Resize', img_scale=(640, 640), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
-    # dict(type='Normalize', **img_norm_cfg),
+    dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', pad_to_square=True, pad_val=dict(img=(114.0, 114.0, 114.0))),
     dict(type='DefaultFormatBundle'),
     dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels', 'query_img',
@@ -116,9 +116,9 @@ query_train_pipeline = [
             img_db_path='data/lvis/train_imgs.hdf5',
             backend='hdf5',
             type='lvis')),
-dict(type='SampleTarget', output_sz=128, search_area_factor=1),
+dict(type='SampleTarget', output_sz=128, search_area_factor=1.5),
 dict(type='RandomFlip', flip_ratio=0.5),
-# dict(type='Normalize', **img_norm_cfg),
+dict(type='Normalize', **img_norm_cfg),
 dict(type='DefaultFormatBundle'),
 dict(type='Collect', keys=['img']),
 ]
@@ -173,13 +173,14 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type=dataset_type,
-        classes = data_root + f'oneshot/train_split_{str(split)}.txt',
+        # classes = data_root + f'oneshot/train_split_{str(split)}.txt',
         ann_file=data_root + 'annotations/instances_traintoy.json',
         img_prefix=data_root + 'train2017/',
         pipeline=train_pipeline,
         query_pipeline=query_train_pipeline,
         average_num = average_num,
         split=split,
+
     ),
     val=dict(
         type=dataset_type,
@@ -240,4 +241,4 @@ opencv_num_threads = 0
 # set multi-process start method as `fork` to speed up the training
 mp_start_method = 'fork'
 find_unused_parameters = True
-load_from='saved_models/cvt_weights/CvT-13-384x384-IN-22k-backbone.pth'
+load_from='saved_models/cvt_weights/CvT-21-384x384-IN-22k-backbone.pth'

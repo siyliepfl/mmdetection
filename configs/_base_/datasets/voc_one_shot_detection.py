@@ -1,6 +1,6 @@
 # dataset settings
-dataset_type = 'CocoOneShotDataset'
-data_root = 'data/lvis/'
+dataset_type = 'VocOneShotDataset'
+data_root = 'data/voc/'
 img_norm_cfg = dict(
     mean=[102.9801, 115.9465, 122.7717], std=[1.0, 1.0, 1.0], to_rgb=False)
 
@@ -8,7 +8,7 @@ train_pipeline = [
     dict(
         type='LoadImageFromFile',
         file_client_args=dict(
-            img_db_path='data/lvis/train_imgs.hdf5',
+            img_db_path='data/voc/voc_0712_imgs.h5',
             backend='hdf5',
             type='lvis')),
     dict(type='LoadAnnotations', with_bbox=True),
@@ -25,7 +25,7 @@ query_train_pipeline = [
     dict(
         type='LoadImageFromFile',
         file_client_args=dict(
-            img_db_path='data/lvis/train_imgs.hdf5',
+            img_db_path='data/voc/voc_0712_imgs.h5',
             backend='hdf5',
             type='lvis')),
 dict(type='SampleTarget', output_sz=128, search_area_factor=1),
@@ -39,7 +39,7 @@ query_test_pipeline = [
     dict(
         type='LoadImageFromFile',
         file_client_args=dict(
-            img_db_path='data/lvis/train_imgs.hdf5',
+            img_db_path='data/voc/voc_0712_imgs.h5',
             backend='hdf5',
             type='lvis')),
     dict(type='SampleTarget', output_sz=128, search_area_factor=1),
@@ -53,7 +53,7 @@ test_pipeline = [
     dict(
         type='LoadImageFromFile',
         file_client_args=dict(
-            img_db_path='data/lvis/val2017.h5',
+            img_db_path='data/voc/voc_0712_imgs.h5',
             backend='hdf5',
             type='lvis')),
     dict(type='LoadAnnotations', with_bbox=True),
@@ -78,35 +78,32 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type=dataset_type,
-        # classes = data_root + f'oneshot/train_split_{str(split)}.txt',
-        ann_file=data_root + 'annotations/instances_train2017.json',
-        img_prefix=data_root + 'train2017/',
+        ann_file=data_root + '/voc0712_train.json',
+        img_prefix=data_root,
         pipeline=train_pipeline,
         query_pipeline=query_train_pipeline,
         average_num = average_num,
         split=split,
-        # no_test_class_present=True,
-
     ),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'val2017/',
+        ann_file=data_root + '/voc07_test.json',
+        img_prefix=data_root,
         pipeline=test_pipeline,
         query_pipeline=query_test_pipeline,
     average_num = average_num,
     split=split,
-    query_json = data_root + 'annotations/instances_train2017.json',
+    query_json = data_root + '/voc0712_train.json',
     ),
     test=dict(
         type=dataset_type,
         # classes = data_root + 'oneshot/test_split_0.txt',
-        ann_file=data_root + 'annotations/instances_val2017.json',
-        img_prefix=data_root + 'val2017/',
+        ann_file=data_root + 'voc07_test.json',
+        img_prefix=data_root,
         pipeline=test_pipeline,
         query_pipeline=query_test_pipeline,
     average_num = average_num,
     split=split,
-    query_json = data_root + 'annotations/instances_train2017.json',
+    query_json = data_root + 'voc0712_train.json',
     ))
-evaluation = dict(interval=1, metric='bbox')
+evaluation = dict(interval=1, metric='mAP')

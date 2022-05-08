@@ -16,7 +16,7 @@ import numpy as np
 from mmcv.utils import print_log
 from terminaltables import AsciiTable
 from mmcv.parallel.data_container import DataContainer
-from mmdet.core import eval_map, eval_recalls
+from mmdet.core import eval_map, eval_recalls, print_map_summary
 from .api_wrappers import COCO, COCOeval
 from .builder import DATASETS
 from .custom import CustomDataset
@@ -24,48 +24,22 @@ from .pipelines import Compose
 import random
 
 @DATASETS.register_module()
-class CocoOneShotDataset(CustomDataset):
+class VocOneShotDataset(CustomDataset):
 
-    CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
-               'train', 'truck', 'boat', 'traffic light', 'fire hydrant',
-               'stop sign', 'parking meter', 'bench', 'bird', 'cat', 'dog',
-               'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe',
-               'backpack', 'umbrella', 'handbag', 'tie', 'suitcase', 'frisbee',
-               'skis', 'snowboard', 'sports ball', 'kite', 'baseball bat',
-               'baseball glove', 'skateboard', 'surfboard', 'tennis racket',
-               'bottle', 'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl',
-               'banana', 'apple', 'sandwich', 'orange', 'broccoli', 'carrot',
-               'hot dog', 'pizza', 'donut', 'cake', 'chair', 'couch',
-               'potted plant', 'bed', 'dining table', 'toilet', 'tv', 'laptop',
-               'mouse', 'remote', 'keyboard', 'cell phone', 'microwave',
-               'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock',
-               'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush')
+    CLASSES = ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car',
+               'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse',
+               'motorbike', 'person', 'pottedplant', 'sheep', 'sofa', 'train',
+               'tvmonitor')
 
-    PALETTE = [(220, 20, 60), (119, 11, 32), (0, 0, 142), (0, 0, 230),
-               (106, 0, 228), (0, 60, 100), (0, 80, 100), (0, 0, 70),
-               (0, 0, 192), (250, 170, 30), (100, 170, 30), (220, 220, 0),
-               (175, 116, 175), (250, 0, 30), (165, 42, 42), (255, 77, 255),
-               (0, 226, 252), (182, 182, 255), (0, 82, 0), (120, 166, 157),
-               (110, 76, 0), (174, 57, 255), (199, 100, 0), (72, 0, 118),
-               (255, 179, 240), (0, 125, 92), (209, 0, 151), (188, 208, 182),
-               (0, 220, 176), (255, 99, 164), (92, 0, 73), (133, 129, 255),
-               (78, 180, 255), (0, 228, 0), (174, 255, 243), (45, 89, 255),
-               (134, 134, 103), (145, 148, 174), (255, 208, 186),
-               (197, 226, 255), (171, 134, 1), (109, 63, 54), (207, 138, 255),
-               (151, 0, 95), (9, 80, 61), (84, 105, 51), (74, 65, 105),
-               (166, 196, 102), (208, 195, 210), (255, 109, 65), (0, 143, 149),
-               (179, 0, 194), (209, 99, 106), (5, 121, 0), (227, 255, 205),
-               (147, 186, 208), (153, 69, 1), (3, 95, 161), (163, 255, 0),
-               (119, 0, 170), (0, 182, 199), (0, 165, 120), (183, 130, 88),
-               (95, 32, 0), (130, 114, 135), (110, 129, 133), (166, 74, 118),
-               (219, 142, 185), (79, 210, 114), (178, 90, 62), (65, 70, 15),
-               (127, 167, 115), (59, 105, 106), (142, 108, 45), (196, 172, 0),
-               (95, 54, 80), (128, 76, 255), (201, 57, 1), (246, 0, 122),
-               (191, 162, 208)]
+    PALETTE = [(106, 0, 228), (119, 11, 32), (165, 42, 42), (0, 0, 192),
+               (197, 226, 255), (0, 60, 100), (0, 0, 142), (255, 77, 255),
+               (153, 69, 1), (120, 166, 157), (0, 182, 199), (0, 226, 252),
+               (182, 182, 255), (0, 0, 230), (220, 20, 60), (163, 255, 0),
+               (0, 82, 0), (3, 95, 161), (0, 80, 100), (183, 130, 88)]
 
     def __init__(self, query_pipeline,
-                 split,
-                 average_num,
+                 split=0,
+                 average_num=1,
                  query_json=None,
                  no_test_class_present=False,
                  **kwargs):
@@ -85,22 +59,13 @@ class CocoOneShotDataset(CustomDataset):
         self.split = split
         self.no_test_class_present = no_test_class_present
 
-        self.known_cats_labels = [cat
-                                  for cat in range(0, 80)
-                                  if cat % 4 != split
-                                  ]
-        self.unknown_cats_labels = [cat
-                                    for cat in range(0, 80)
-                                    if cat % 4 == split
-                                    ]
-        self.known_cats_ids = {
-                        self.label2cat[cat_label]
-                                 for cat_label in self.known_cats_labels
-        }
-        self.unknown_cats_ids = {
-                        self.label2cat[cat_label]
-                                 for cat_label in self.unknown_cats_labels
-        }
+        self.unknown_cats_ids = [self.CLASSES.index('cow'),
+                                 self.CLASSES.index('sheep'),
+                                 self.CLASSES.index('cat'),
+                                 self.CLASSES.index('aeroplane')]
+        self.known_cats_ids = list(set(self.cat_ids) - set(self.unknown_cats_ids))
+        self.known_cats_labels = self.known_cats_ids
+        self.unknown_cats_labels = self.unknown_cats_ids
 
     def build_query_bank_from_files(self, query_json):
 
@@ -956,71 +921,118 @@ class CocoOneShotDataset(CustomDataset):
 
     def evaluate(self,
                  results,
-                 metric='bbox',
+                 metric='mAP',
                  logger=None,
-                 jsonfile_prefix=None,
-                 classwise=False,
                  proposal_nums=(100, 300, 1000),
-                 iou_thrs=None,
-                 metric_items=None):
-        """Evaluation in COCO protocol.
+                 iou_thr=0.5,
+                 scale_ranges=None):
+        """Evaluate in VOC protocol.
 
         Args:
             results (list[list | tuple]): Testing results of the dataset.
             metric (str | list[str]): Metrics to be evaluated. Options are
-                'bbox', 'segm', 'proposal', 'proposal_fast', 'mAP', 'recall'.
-            logger (logging.Logger | str | None): Logger used for printing
+                'mAP', 'recall'.
+            logger (logging.Logger | str, optional): Logger used for printing
                 related information during evaluation. Default: None.
-            jsonfile_prefix (str | None): The prefix of json files. It includes
-                the file path and the prefix of filename, e.g., "a/b/prefix".
-                If not specified, a temp file will be created. Default: None.
-            classwise (bool): Whether to evaluating the AP for each class.
             proposal_nums (Sequence[int]): Proposal number used for evaluating
                 recalls, such as recall@100, recall@1000.
                 Default: (100, 300, 1000).
-            iou_thrs (Sequence[float], optional): IoU threshold used for
-                evaluating recalls/mAPs. If set to a list, the average of all
-                IoUs will also be computed. If not specified, [0.50, 0.55,
-                0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95] will be used.
-                Default: None.
-            metric_items (list[str] | str, optional): Metric items that will
-                be returned. If not specified, ``['AR@100', 'AR@300',
-                'AR@1000', 'AR_s@1000', 'AR_m@1000', 'AR_l@1000' ]`` will be
-                used when ``metric=='proposal'``, ``['mAP', 'mAP_50', 'mAP_75',
-                'mAP_s', 'mAP_m', 'mAP_l']`` will be used when
-                ``metric=='bbox' or metric=='segm'``.
-            dataset (str): Specify which dataset to use for the evaluation.
+            iou_thr (float | list[float]): IoU threshold. Default: 0.5.
+            scale_ranges (list[tuple], optional): Scale ranges for evaluating
+                mAP. If not specified, all bounding boxes would be included in
+                evaluation. Default: None.
 
         Returns:
-            dict[str, float]: COCO style evaluation metric.
+            dict[str, float]: AP/recall metrics.
         """
 
-
-        metrics = metric if isinstance(metric, list) else [metric]
-        allowed_metrics = ['bbox', 'segm', 'proposal', 'proposal_fast']
-        for metric in metrics:
-            if metric not in allowed_metrics:
-                raise KeyError(f'metric {metric} is not supported')
-
-        coco_gt = self.coco
-        self.cat_ids = coco_gt.get_cat_ids(cat_names=self.CLASSES)
-
-
-        if not os.path.exists(jsonfile_prefix):
-            os.mkdir(jsonfile_prefix)
-
+        if not isinstance(metric, str):
+            assert len(metric) == 1
+            metric = metric[0]
+        allowed_metrics = ['mAP', 'recall']
+        if metric not in allowed_metrics:
+            raise KeyError(f'metric {metric} is not supported')
+        annotations = [self.get_ann_info(i) for i in range(len(self))]
+        eval_results = OrderedDict()
+        iou_thrs = [iou_thr] if isinstance(iou_thr, float) else iou_thr
+        # create multiple run results list
         results_files_list = []
         for i in range(self.avg_num):
             tmp_result = [item[i] for item in results]
-            result_files, tmp_dir = self.format_results(tmp_result, jsonfile_prefix + '/'+str(i))
-            results_files_list.append(result_files)
+            results_files_list.append(tmp_result)
 
-        eval_results = self.evaluate_det_segm(results, results_files_list, coco_gt,
-                                              metrics, logger, classwise,
-                                              proposal_nums, iou_thrs,
-                                              metric_items)
+        different_runs_per_class_res = []
+        different_runs_mean_aps = []
+
+        for result in results_files_list:
+
+            if metric == 'mAP':
+                assert isinstance(iou_thrs, list)
+                # if self.year == 2007:
+                #     ds_name = 'voc07'
+                # else:
+                #     ds_name = self.CLASSES
+                ds_name = 'voc07'
+                mean_aps = []
+
+                for iou_thr in iou_thrs:
+                    print_log(f'\n{"-" * 15}iou_thr: {iou_thr}{"-" * 15}')
+                    # Follow the official implementation,
+                    # http://host.robots.ox.ac.uk/pascal/VOC/voc2012/VOCdevkit_18-May-2011.tar
+                    # we should use the legacy coordinate system in mmdet 1.x,
+                    # which means w, h should be computed as 'x2 - x1 + 1` and
+                    # `y2 - y1 + 1`
+                    mean_ap, per_class_eval_results = eval_map(
+                        result,
+                        annotations,
+                        scale_ranges=None,
+                        iou_thr=iou_thr,
+                        dataset=ds_name,
+                        logger='silent',
+                        use_legacy_coordinate=True)
+                    if iou_thr == 0.5:
+                        different_runs_per_class_res.append(per_class_eval_results)
+                        different_runs_mean_aps.append(mean_ap)
+                    mean_aps.append(mean_ap)
+                    eval_results[f'AP{int(iou_thr * 100):02d}'] = round(mean_ap, 3)
+                eval_results['mAP'] = sum(mean_aps) / len(mean_aps)
+                eval_results.move_to_end('mAP', last=False)
+
+            elif metric == 'recall':
+                gt_bboxes = [ann['bboxes'] for ann in annotations]
+                recalls = eval_recalls(
+                    gt_bboxes,
+                    result,
+                    proposal_nums,
+                    iou_thrs,
+                    logger=logger,
+                    use_legacy_coordinate=True)
+                for i, num in enumerate(proposal_nums):
+                    for j, iou_thr in enumerate(iou_thrs):
+                        eval_results[f'recall@{num}@{iou_thr}'] = recalls[i, j]
+                if recalls.shape[1] > 1:
+                    ar = recalls.mean(axis=1)
+                    for i, num in enumerate(proposal_nums):
+                        eval_results[f'AR@{num}'] = ar[i]
+
+        avg_per_class_eval_results = [{'num_gts': 0, 'num_dets': 0,
+                                       'recall': np.array([0.0]), 'ap': 0.0} for _ in range(20)]
+        for result_list in different_runs_per_class_res:
+            for i, item in enumerate(result_list):
+                avg_per_class_eval_results[i]['num_gts'] += item['num_gts']
+                avg_per_class_eval_results[i]['num_dets'] += item['num_dets']
+                if item['recall'].size > 0:
+                    avg_per_class_eval_results[i]['recall'] += np.array(item['recall'], ndmin=2)[:, -1]
+                avg_per_class_eval_results[i]['ap'] += item['ap']
+
+        for i, item in enumerate(avg_per_class_eval_results):
+            avg_per_class_eval_results[i] = {key: value / self.avg_num
+                                             for key, value in item.items()}
+        mean_ap_final = sum(different_runs_mean_aps)/self.avg_num
 
 
-        if tmp_dir is not None:
-            tmp_dir.cleanup()
+        print_map_summary(mean_ap_final, avg_per_class_eval_results, dataset='voc07')
+
         return eval_results
+
+

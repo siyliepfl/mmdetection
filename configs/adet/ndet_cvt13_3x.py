@@ -1,6 +1,6 @@
 _base_ = [
     '../_base_/datasets/coco_detection.py',
-    # '../_base_/schedules/schedule_1x.py',
+    '../_base_/schedules/schedule_1x.py',
     '../_base_/default_runtime.py'
 ]
 # model settings
@@ -124,7 +124,6 @@ test_pipeline = [
 #     val=dict(pipeline=test_pipeline),
 #     test=dict(pipeline=test_pipeline))
 
-
 # dataset settings
 dataset_type = 'CocoDataset'
 data_root = 'data/lvis/'
@@ -149,20 +148,18 @@ data = dict(
         ann_file=data_root + 'annotations/instances_val2017.json',
         img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline))
-evaluation = dict(interval=2, metric='bbox')
+evaluation = dict(interval=1, metric='bbox')
 
 # optimizer
-optimizer = dict(
-    type='AdamW',
-    lr=0.001,
-    weight_decay=0.0001)
-optimizer_config = dict(grad_clip=dict(max_norm=0.1, norm_type=2))
+optimizer = dict(type='SGD', lr=0.002, momentum=0.9, weight_decay=0.0001)
+optimizer_config = dict(grad_clip=None)
 # learning policy
-lr_config = dict(policy='step', step=[100])
-runner = dict(type='EpochBasedRunner', max_epochs=150)
-checkpoint_config = dict(interval=2)
-
+lr_config = dict(
+    policy='step',
+    warmup='linear',
+    warmup_iters=500,
+    warmup_ratio=0.001,
+    step=[35, 45])
+runner = dict(type='EpochBasedRunner', max_epochs=50)
 find_unused_parameters = True
 load_from='saved_models/cvt_weights/CvT-13-384x384-IN-22k-backbone.pth'
-
-

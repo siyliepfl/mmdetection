@@ -16,6 +16,8 @@ from .voc import VOCDataset
 from .wider_face import WIDERFaceDataset
 from .xml_style import XMLDataset
 from .coco_oneshot import CocoOneShotDataset
+from .coco_fewshot import CocoFewShotDataset
+from .voc_oneshot import VocOneShotDataset
 
 __all__ = [
     'CustomDataset', 'XMLDataset', 'CocoDataset', 'DeepFashionDataset',
@@ -25,5 +27,6 @@ __all__ = [
     'ClassBalancedDataset', 'WIDERFaceDataset', 'DATASETS', 'PIPELINES',
     'build_dataset', 'replace_ImageToTensor', 'get_loading_pipeline',
     'NumClassCheckHook', 'CocoPanopticDataset', 'MultiImageMixDataset',
-    'OpenImagesDataset', 'OpenImagesChallengeDataset', 'CocoOneShotDataset'
+    'OpenImagesDataset', 'OpenImagesChallengeDataset', 'CocoOneShotDataset','CocoFewShotDataset'
+    'VocOneShotDataset'
 ]

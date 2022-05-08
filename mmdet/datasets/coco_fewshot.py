@@ -16,7 +16,7 @@ import numpy as np
 from mmcv.utils import print_log
 from terminaltables import AsciiTable
 from mmcv.parallel.data_container import DataContainer
-from mmdet.core import eval_map, eval_recalls
+from mmdet.core import eval_recalls
 from .api_wrappers import COCO, COCOeval
 from .builder import DATASETS
 from .custom import CustomDataset
@@ -24,7 +24,7 @@ from .pipelines import Compose
 import random
 
 @DATASETS.register_module()
-class CocoOneShotDataset(CustomDataset):
+class CocoFewShotDataset(CustomDataset):
 
     CLASSES = ('person', 'bicycle', 'car', 'motorcycle', 'airplane', 'bus',
                'train', 'truck', 'boat', 'traffic light', 'fire hydrant',
@@ -63,14 +63,8 @@ class CocoOneShotDataset(CustomDataset):
                (95, 54, 80), (128, 76, 255), (201, 57, 1), (246, 0, 122),
                (191, 162, 208)]
 
-    def __init__(self, query_pipeline,
-                 split,
-                 average_num,
-                 query_json=None,
-                 no_test_class_present=False,
-                 **kwargs):
+    def __init__(self, query_pipeline, split, average_num, query_json=None, **kwargs):
         super().__init__( **kwargs)
-
         if self.test_mode and query_json is not None:
             self.class_anno_mapping, self.imid_info_mapping_dict = self.build_query_bank_from_files(query_json)
         else:
@@ -79,51 +73,42 @@ class CocoOneShotDataset(CustomDataset):
         self.query_json = query_json
         self.label2cat = {y:x for x,y in self.cat2label.items()}
         self.transform_pipeline = Compose(kwargs['pipeline'][:-1])
+        # self.default_collect_pipeline = Compose([dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels'])])
         self.collect_pipeline = Compose([kwargs['pipeline'][-1]])
+        # self.load_image = Compose(query_pipeline[:1])
         self.query_pipeline = Compose(query_pipeline)
         self.avg_num = average_num
         self.split = split
-        self.no_test_class_present = no_test_class_present
 
-        self.known_cats_labels = [cat
-                                  for cat in range(0, 80)
-                                  if cat % 4 != split
-                                  ]
-        self.unknown_cats_labels = [cat
-                                    for cat in range(0, 80)
-                                    if cat % 4 == split
-                                    ]
-        self.known_cats_ids = {
-                        self.label2cat[cat_label]
-                                 for cat_label in self.known_cats_labels
-        }
-        self.unknown_cats_ids = {
-                        self.label2cat[cat_label]
-                                 for cat_label in self.unknown_cats_labels
-        }
+        self.known_cats_labels = [cat for cat in range(0, 80) if cat % 4 != split]
+        self.unknown_cats_labels = [cat for cat in range(0, 80) if cat % 4 == split]
+
 
     def build_query_bank_from_files(self, query_json):
 
         train_query_dict = json.load(open(query_json))
-        class_anno_mapping = {}
 
+        class_anno_mapping = {}
         for item in train_query_dict['annotations']:
             if item['bbox'][2] > 50 and item['bbox'][3] > 50 and item['iscrowd'] == 0:
                 if item['category_id'] not in class_anno_mapping:
                     class_anno_mapping[item['category_id']] = [item]
                 else:
                     class_anno_mapping[item['category_id']].append(item)
-
         if len(class_anno_mapping.keys()) != len(self.CLASSES):
             empty_class_id = set(self.cat_ids) - set(class_anno_mapping.keys())
             empty_class_name = [self.CLASSES[self.cat2label[cid]] for cid in empty_class_id]
             print('Empty classes', empty_class_name, 'after filtering')
-
         imid_info_mapping_dict = {}
         for im in train_query_dict['images']:
             if im['id'] not in imid_info_mapping_dict:
                 im['filename'] = im['file_name']
                 imid_info_mapping_dict[im['id']] = im
+        # self.
+        # for i in range(len(train_query_dict['categories']):
+        #     cid = train_query_dict['categories'][i]['id']
+
+
 
         return class_anno_mapping, imid_info_mapping_dict
 
@@ -138,16 +123,14 @@ class CocoOneShotDataset(CustomDataset):
                     class_anno_mapping[value['category_id']] = [value]
                 else:
                     class_anno_mapping[value['category_id']].append(value)
-
         if len(class_anno_mapping.keys()) != len(self.CLASSES):
             empty_class_id = set(self.cat_ids) - set(class_anno_mapping.keys())
             empty_class_name = [self.CLASSES[self.cat2label[cid]] for cid in empty_class_id]
             print('Empty classes', empty_class_name, 'after filtering')
-
         return class_anno_mapping
 
 
-    def generate_oneshot_data(self, data, query_cat_id, anno_list):
+    def generate_oneshot_data(self, data, query_label_id, anno_list):
         """
 
         Randomly sample one class that exist in the target image. Filter the ground truth.
@@ -169,8 +152,8 @@ class CocoOneShotDataset(CustomDataset):
 
             query_data = self.prepare_query_img(query_anno, query_img_id)
 
-        query_label_id = self.cat2label[query_cat_id]
         data['query_img_metas'] = query_data['img_metas']
+
         data['query_img'] = query_data['img']
         data['query_label_id'] = DataContainer(torch.tensor(query_label_id))
         data['query_targets'] = DataContainer(data['gt_bboxes'].data[data['gt_labels'].data == query_label_id])
@@ -195,7 +178,8 @@ class CocoOneShotDataset(CustomDataset):
             img_info = self.imid_info_mapping_dict[query_img_id]
 
         results = dict(img_info=img_info)
-
+        # if self.proposals is not None:
+        #     results['proposals'] = self.proposals[idx]
         self.pre_pipeline(results)
         results['bbox'] = query_anno['bbox']
         query_res = self.query_pipeline(results)
@@ -221,40 +205,6 @@ class CocoOneShotDataset(CustomDataset):
         self.pre_pipeline(results)
         return self.transform_pipeline(results)
 
-    def check_train_img(self, idx):
-
-        while True:
-            # load annotations
-            img_id = self.data_infos[idx]['id']
-            ann_ids = self.coco.get_ann_ids(img_ids=[img_id])
-            ann_info = self.coco.load_anns(ann_ids)
-            ann_cat_ids = {item['category_id'] for item in ann_info}
-            known_interset_anns = ann_cat_ids.intersection(self.known_cats_ids)
-
-            # check empty image
-            if not known_interset_anns:
-                # print("Image ", str(self.data_infos[idx]['id']), 'has no annotations!!!!')
-                idx = self._rand_another(idx)
-                continue
-
-            # check corresponding query images for the class exists
-            query_cat_id = list(known_interset_anns)[random.randint(0, len(known_interset_anns) - 1)]
-            if query_cat_id not in self.class_anno_mapping:
-                idx = self._rand_another(idx)
-                continue
-
-            # check test classes presences
-            if self.no_test_class_present:
-                unknown_interset_anns = ann_cat_ids.intersection(self.unknown_cats_ids)
-                if unknown_interset_anns:
-                    idx = self._rand_another(idx)
-                    continue
-
-            anno_list = self.class_anno_mapping[query_cat_id]
-
-            return idx, query_cat_id, anno_list
-
-
     def __getitem__(self, idx):
         """Get training/test data after pipeline.
 
@@ -269,14 +219,27 @@ class CocoOneShotDataset(CustomDataset):
         if self.test_mode:
             return self.prepare_test_img(idx)
         while True:
-
-            idx, query_cat_id, query_ann_list = self.check_train_img(idx)
             data = self.prepare_train_img(idx)
             if data is None:
                 idx = self._rand_another(idx)
                 continue
 
-            data = self.generate_oneshot_data(data, query_cat_id, query_ann_list)
+            gt_class_set = set(data['gt_labels'].data.tolist())
+            gt_class_set_length = len(gt_class_set)
+            if gt_class_set_length < 1:
+                print("Image ", str(self.data_infos[idx]['id']), 'has no annotations!!!!')
+                idx = self._rand_another(idx)
+                continue
+
+            query_label_id = list(gt_class_set)[random.randint(0, len(gt_class_set) - 1)]
+            query_cat_id = self.label2cat[int(query_label_id)]
+            if query_cat_id not in self.class_anno_mapping:
+                # print('This class is empty: ', query_cat_id, 'after filtering')
+                idx = self._rand_another(idx)
+                continue
+            else:
+                anno_list = self.class_anno_mapping[query_cat_id]
+            data = self.generate_oneshot_data(data, query_label_id, anno_list)
             data = self.collect_pipeline(data)
             return data
 
@@ -330,7 +293,7 @@ class CocoOneShotDataset(CustomDataset):
         self.pre_pipeline(results)
         results = self.pipeline(results)
         img_id = img_info['id']
-        gt_class_labels = set(ann_info['labels'])
+        gt_class_labels = set(self.label2cat.keys())
         per_class_query_imgs = self.prepare_query_test_img(img_id,
                                                            gt_class_labels,
                                                            per_cat_num=self.avg_num)
@@ -353,21 +316,19 @@ class CocoOneShotDataset(CustomDataset):
         # The order of returned `cat_ids` will not
         # change with the order of the CLASSES
         self.cat_ids = self.coco.get_cat_ids(cat_names=self.CLASSES)
+
         self.cat2label = {cat_id: i for i, cat_id in enumerate(self.cat_ids)}
         self.img_ids = self.coco.get_img_ids()
         data_infos = []
         total_ann_ids = []
-
         for i in self.img_ids:
             info = self.coco.load_imgs([i])[0]
             info['filename'] = info['file_name']
             data_infos.append(info)
             ann_ids = self.coco.get_ann_ids(img_ids=[i])
             total_ann_ids.extend(ann_ids)
-
         assert len(set(total_ann_ids)) == len(
             total_ann_ids), f"Annotation ids in '{ann_file}' are not unique!"
-
         return data_infos
 
     def get_ann_info(self, idx):
@@ -968,7 +929,7 @@ class CocoOneShotDataset(CustomDataset):
         Args:
             results (list[list | tuple]): Testing results of the dataset.
             metric (str | list[str]): Metrics to be evaluated. Options are
-                'bbox', 'segm', 'proposal', 'proposal_fast', 'mAP', 'recall'.
+                'bbox', 'segm', 'proposal', 'proposal_fast'.
             logger (logging.Logger | str | None): Logger used for printing
                 related information during evaluation. Default: None.
             jsonfile_prefix (str | None): The prefix of json files. It includes
@@ -989,12 +950,10 @@ class CocoOneShotDataset(CustomDataset):
                 used when ``metric=='proposal'``, ``['mAP', 'mAP_50', 'mAP_75',
                 'mAP_s', 'mAP_m', 'mAP_l']`` will be used when
                 ``metric=='bbox' or metric=='segm'``.
-            dataset (str): Specify which dataset to use for the evaluation.
 
         Returns:
             dict[str, float]: COCO style evaluation metric.
         """
-
 
         metrics = metric if isinstance(metric, list) else [metric]
         allowed_metrics = ['bbox', 'segm', 'proposal', 'proposal_fast']
@@ -1014,6 +973,7 @@ class CocoOneShotDataset(CustomDataset):
             tmp_result = [item[i] for item in results]
             result_files, tmp_dir = self.format_results(tmp_result, jsonfile_prefix + '/'+str(i))
             results_files_list.append(result_files)
+
 
         eval_results = self.evaluate_det_segm(results, results_files_list, coco_gt,
                                               metrics, logger, classwise,
