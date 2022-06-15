@@ -30,9 +30,6 @@ model = dict(
         PADDING_Q= [1, 1, 1],
         STRIDE_Q= [1, 1, 1],
         FREEZE_BN= True),
-        # init_cfg=dict(
-        #     type='Pretrained',
-        #     checkpoint='saved_models/cvt_weights/CvT-13-384x384-IN-22k.pth')
             ),
     neck=dict(
         type='FPN',
@@ -40,7 +37,7 @@ model = dict(
         out_channels=256,
         start_level=1,
         add_extra_convs='on_output',  # use P5
-        num_outs=3,
+        num_outs=5,
         relu_before_extra_convs=True),
     bbox_head=dict(
         type='MAdetHead',
@@ -48,8 +45,9 @@ model = dict(
         in_channels=256,
         stacked_convs=4,
         feat_channels=256,
-        strides=[8, 16, 32],
-        regress_ranges = ((-1, 64), (64, 128), (128, 256)),
+        # strides=[8, 16, 32],
+        # regress_ranges = ((-1, 64), (64, 128), (128, 256)),
+        strides=[8, 16, 32, 64, 128],
         loss_cls=dict(
             type='FocalLoss',
             use_sigmoid=True,
@@ -150,19 +148,19 @@ data = dict(
         pipeline=test_pipeline))
 evaluation = dict(interval=1, metric='bbox')
 
-# # optimizer
-# optimizer = dict(
-#     lr=0.01, paramwise_cfg=dict(bias_lr_mult=2., bias_decay_mult=0.))
-# optimizer_config = dict(
-#     _delete_=True, grad_clip=dict(max_norm=35, norm_type=2))
-# # learning policy
-# lr_config = dict(
-#     policy='step',
-#     warmup='constant',
-#     warmup_iters=500,
-#     warmup_ratio=0.001,
-#     step=[16, 22])
-# runner = dict(type='EpochBasedRunner', max_epochs=24)
+# optimizer
+optimizer = dict(
+    lr=0.0002, paramwise_cfg=dict(bias_lr_mult=2., bias_decay_mult=0.))
+optimizer_config = dict(
+    _delete_=True, grad_clip=dict(max_norm=35, norm_type=2))
+# learning policy
+lr_config = dict(
+    policy='step',
+    warmup='constant',
+    warmup_iters=500,
+    warmup_ratio=0.001,
+    step=[16, 22])
+runner = dict(type='EpochBasedRunner', max_epochs=24)
 
 find_unused_parameters = True
 load_from='saved_models/cvt_weights/CvT-13-384x384-IN-22k-backbone.pth'

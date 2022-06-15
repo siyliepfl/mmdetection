@@ -2,15 +2,15 @@ import subprocess
 
 # define Euler related parameters
 gpu = '4'
-time='24'
+time='4'
 mem = '8000'
 n_cores = '8'
 
 
 # define task related parameters
 
-name = 'voc_adet_cvt13_2x_search_1'
-config= 'configs/adet/adet_cvt13_2x_voc.py'
+name = 'multi_conv_adet_cvt13_2x_search_1'
+config= 'configs/adet/conv_adet_cvt13_2x_voc.py'
 gpu_type = "NVIDIAGeForceRTX2080Ti"
 
 dataset = 'voc'
@@ -19,19 +19,23 @@ dataset = 'voc'
 # elif dataset == 'voc':
 #     ann_file = 'data/lvis/annotations/lvis-0.5_coco2017_train.json'
 
-port=22222
+port=22266
 
-batch_size=2
+batch_size=4
 average_num = str(2)
 init_checkpoint = '1k'
 no_test_class_present =str(False)
 split_list = [0]
+att_type = 'all'
 lr = str(0.001)
 for i in split_list:
     split = str(i)
     # one_shot_data = 'data/lvis/' + f'oneshot/train_split_{split}.txt'
     port_str = str(port)
-    log_name = name + '_' + dataset +  '_split_' + split + '_' + init_checkpoint + '_NoTestClass_' + no_test_class_present
+    log_name = name + '_' + dataset +  '_split_' + split + '_' \
+               + init_checkpoint + '_NoTestClass_' \
+               + no_test_class_present + '_lr_' + lr + '_bs_' \
+               + str(batch_size*int(gpu)) + '_att_' + att_type
     json_prefix = 'results/'+ name + '_split_'+split
     checkpoint = f'saved_models/cvt_weights/CvT-13-384x384-IN-{init_checkpoint}-backbone.pth'
 
@@ -41,7 +45,7 @@ for i in split_list:
               f"data.train.split={split} data.val.split={split} data.test.split={split} " \
               f"data.train.average_num={average_num} data.val.average_num={average_num} data.test.average_num={average_num} " \
               f"data.train.no_test_class_present={no_test_class_present} " \
-              f"optimizer.lr={lr} " \
+              f"optimizer.lr={lr} model.backbone.spec.CROSS_ATT={att_type} " \
               # f"evaluation.jsonfile_prefix={json_prefix} "
 
     process = subprocess.Popen(

@@ -5,7 +5,7 @@ _base_ = [
 ]
 # model settings
 model = dict(
-    type='Adet',
+    type='ConvAdet',
     backbone=dict(
         type='CvTAdet',
         in_chans=3,
@@ -44,12 +44,14 @@ model = dict(
         num_outs=5,
         relu_before_extra_convs=True),
     bbox_head=dict(
-        type='FCOSHead',
+        type='ConvAdetHead',
         num_classes=1,
         in_channels=256,
         stacked_convs=4,
         feat_channels=256,
         strides=[8, 16, 32, 64, 128],
+        # strides=[8, 16, 32],
+        # regress_ranges=((-1, 64), (64, 128), (128, 256)),
         loss_cls=dict(
             type='FocalLoss',
             use_sigmoid=True,
@@ -78,16 +80,16 @@ model = dict(
         nms=dict(type='nms', iou_threshold=0.5),
         max_per_img=100),
 
-    # nms_cfg=dict(
-    #     class_agnostic=True,
-    #     batch_nms_cfg = dict(
-    #         iou_thr=0.5,
-    #     ),
-    #     max_per_img=50
-    # )
+    nms_cfg=dict(
+        class_agnostic=True,
+        batch_nms_cfg = dict(
+            iou_thr=0.5,
+        ),
+        max_per_img=50
+    )
 )
 
-optimizer = dict(type='SGD', lr=0.002, momentum=0.9, weight_decay=0.0001)
+optimizer = dict(type='SGD', lr=0.0002, momentum=0.9, weight_decay=0.0001)
 checkpoint_config = dict(interval=1)
 
 # yapf:disable
@@ -110,4 +112,4 @@ opencv_num_threads = 0
 # set multi-process start method as `fork` to speed up the training
 mp_start_method = 'fork'
 find_unused_parameters = True
-load_from='saved_models/cvt_weights/CvT-13-384x384-IN-22k-backbone.pth'
+load_from='saved_models/cvt_weights/CvT-13-384x384-IN-1k-backbone.pth'

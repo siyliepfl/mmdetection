@@ -45,6 +45,9 @@ from .yolof import YOLOF
 from .yolox import YOLOX
 from .ndet import Ndet
 from .madet import MAdet
+from .conv_adet import ConvAdet
+from .mconv_adet import MultiConvAdet
+from .ndet_mask2former import NdetMask2Former
 
 __all__ = [
     'ATSS', 'BaseDetector', 'SingleStageDetector', 'TwoStageDetector', 'RPN',
@@ -55,5 +58,6 @@ __all__ = [
     'VFNet', 'DETR', 'TridentFasterRCNN', 'SparseRCNN', 'SCNet', 'SOLO',
     'DeformableDETR', 'AutoAssign', 'YOLOF', 'CenterNet', 'YOLOX',
     'TwoStagePanopticSegmentor', 'PanopticFPN', 'QueryInst', 'LAD', 'TOOD',
-    'MaskFormer', 'Mask2Former', 'Adet', 'Ndet', 'MAdet'
+    'MaskFormer', 'Mask2Former', 'Adet', 'Ndet', 'MAdet', 'ConvAdet', 'MultiConvAdet',
+    'NdetMask2Former',
 ]

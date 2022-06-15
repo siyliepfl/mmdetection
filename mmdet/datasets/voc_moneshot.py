@@ -24,7 +24,7 @@ from .pipelines import Compose
 import random
 
 @DATASETS.register_module()
-class VocOneShotDataset(CustomDataset):
+class VocMultiOneShotDataset(CustomDataset):
 
     CLASSES = ('aeroplane', 'bicycle', 'bird', 'boat', 'bottle', 'bus', 'car',
                'cat', 'chair', 'cow', 'diningtable', 'dog', 'horse',
@@ -42,7 +42,7 @@ class VocOneShotDataset(CustomDataset):
                  average_num=1,
                  query_json=None,
                  no_test_class_present=False,
-                 test_type='oneshot',
+                 test_type='all',
                  **kwargs):
         """
         Args:
@@ -124,7 +124,7 @@ class VocOneShotDataset(CustomDataset):
         return class_anno_mapping
 
 
-    def generate_oneshot_data(self, data, query_cat_id, anno_list):
+    def generate_oneshot_data(self, data, query_cat_id_list, anno_list):
         """
 
         Randomly sample one class that exist in the target image. Filter the ground truth.
@@ -139,19 +139,31 @@ class VocOneShotDataset(CustomDataset):
         """
 
         query_data = None
-        while query_data is None:
-            query_anno = anno_list[random.randint(0, len(anno_list) - 1)]
-            query_img_id = query_anno['image_id']
-            # query_idx = self.img_ids.index(query_img_id)
+        query_label_id_list = []
+        query_img_list = []
+        query_targets_list = []
+        query_label_list = []
+        query_img_meta_list = []
+        for i, query_cat_id in enumerate(query_cat_id_list):
 
-            query_data = self.prepare_query_img(query_anno, query_img_id)
+            while query_data is None:
+                query_anno = anno_list[i][random.randint(0, len(anno_list[i]) - 1)]
+                query_img_id = query_anno['image_id']
+                query_data = self.prepare_query_img(query_anno, query_img_id)
 
-        query_label_id = self.cat2label[query_cat_id]
-        data['query_img_metas'] = query_data['img_metas']
-        data['query_img'] = query_data['img']
-        data['query_label_id'] = DataContainer(torch.tensor(query_label_id))
-        data['query_targets'] = DataContainer(data['gt_bboxes'].data[data['gt_labels'].data == query_label_id])
-        data['query_labels'] = DataContainer(torch.zeros(len(data['query_targets'] )).long())
+            query_label_id = self.cat2label[query_cat_id]
+            query_label_id_list.append(query_label_id)
+            query_img_list.append(query_data['img'].data)
+            query_img_meta_list.append(query_data['img_metas'].data)
+            query_targets_list.append(data['gt_bboxes'].data[data['gt_labels'].data == query_label_id])
+            query_label_list.append(torch.full((len(query_targets_list[-1]), ), i))
+            query_data = None
+
+        data['query_img_metas'] = DataContainer(query_img_meta_list)
+        data['query_img_list'] = DataContainer(query_img_list)
+        data['query_label_id_list'] = DataContainer(query_label_id_list)
+        data['query_targets_list'] = DataContainer(query_targets_list)
+        data['query_labels_list'] = DataContainer(query_label_list)
 
         return data
 
@@ -201,6 +213,7 @@ class VocOneShotDataset(CustomDataset):
     def check_train_img(self, idx):
 
         while True:
+
             # load annotations
             img_id = self.data_infos[idx]['id']
             ann_ids = self.coco.get_ann_ids(img_ids=[img_id])
@@ -215,8 +228,12 @@ class VocOneShotDataset(CustomDataset):
                 continue
 
             # check corresponding query images for the class exists
-            query_cat_id = list(known_interset_anns)[random.randint(0, len(known_interset_anns) - 1)]
-            if query_cat_id not in self.class_anno_mapping:
+            query_cat_id_list = []
+            for query_cat_id in list(known_interset_anns):
+                if query_cat_id in self.class_anno_mapping:
+                    query_cat_id_list.append(query_cat_id)
+
+            if not query_cat_id_list:
                 idx = self._rand_another(idx)
                 continue
 
@@ -227,9 +244,11 @@ class VocOneShotDataset(CustomDataset):
                     idx = self._rand_another(idx)
                     continue
 
-            anno_list = self.class_anno_mapping[query_cat_id]
+            anno_list = []
+            for query_cat_id in query_cat_id_list:
+                anno_list.append(self.class_anno_mapping[query_cat_id])
 
-            return idx, query_cat_id, anno_list
+            return idx, query_cat_id_list, anno_list
 
 
     def __getitem__(self, idx):
@@ -245,15 +264,15 @@ class VocOneShotDataset(CustomDataset):
 
         if self.test_mode:
             return self.prepare_test_img(idx)
-        while True:
 
-            idx, query_cat_id, query_ann_list = self.check_train_img(idx)
+        while True:
+            idx, query_cat_id_list, query_ann_list = self.check_train_img(idx)
             data = self.prepare_train_img(idx)
             if data is None:
                 idx = self._rand_another(idx)
                 continue
 
-            data = self.generate_oneshot_data(data, query_cat_id, query_ann_list)
+            data = self.generate_oneshot_data(data, query_cat_id_list, query_ann_list)
             data = self.collect_pipeline(data)
             return data
 
@@ -307,10 +326,8 @@ class VocOneShotDataset(CustomDataset):
         self.pre_pipeline(results)
         results = self.pipeline(results)
         img_id = img_info['id']
-        if self.test_type == 'oneshot':
+        if self.test_type == 'all':
             gt_class_labels = set(ann_info['labels'])
-        elif self.test_type == 'all':
-            gt_class_labels = set(self.cat_ids)
         elif self.test_type == 'unknown_only':
             gt_class_labels = set(self.unknown_cats_labels)
         elif self.test_type == 'known_only':

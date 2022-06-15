@@ -4,13 +4,12 @@ import collections.abc as container_abcs
 
 import logging
 from collections import OrderedDict
-from mmcv.cnn.bricks.registry import ACTIVATION_LAYERS
-from mmcv.cnn.bricks.registry import NORM_LAYERS
+
 from mmcv.runner import BaseModule
 import torch.nn.functional as F
 from einops import rearrange
 from einops.layers.torch import Rearrange
-from mmcv.cnn import build_conv_layer, build_norm_layer, build_plugin_layer
+
 
 from timm.models.layers import DropPath, trunc_normal_
 import torch
@@ -42,8 +41,6 @@ class LayerNorm(nn.LayerNorm):
         orig_type = x.dtype
         ret = super().forward(x.type(torch.float32))
         return ret.type(orig_type)
-
-
 
 class FrozenBatchNorm2d(BaseModule):
     """
@@ -201,62 +198,70 @@ class Attention(BaseModule):
 
     def forward_conv(self, x, n_templates, t_h, t_w, s_h, s_w):
 
-        feature_bank = torch.split(x,  n_templates * [t_h * t_w] + [s_h * s_w], dim=1)
-        feature_bank = list(feature_bank)
-        template_list = feature_bank[:-1]
-        search = feature_bank[-1]
-        for i, template in enumerate(template_list):
-            template_list[i] = rearrange(template, 'b (h w) c -> b c h w', h=t_h, w=t_w).contiguous()
+        feature_bank = torch.split(x,  [n_templates * t_h * t_w, s_h * s_w], dim=1)
+        # feature_bank = list(feature_bank)
+        template_bank = feature_bank[0]
+        search = feature_bank[1]
+        # for i, template in enumerate(template_list):
+        #     template_list[i] = rearrange(template, 'b (h w) c -> b c h w', h=t_h, w=t_w).contiguous()
+        template_bank = rearrange(template_bank, 'b (n h w) c -> (n b) c h w', n=n_templates, h=t_h, w=t_w)
         search = rearrange(search, 'b (h w) c -> b c h w', h=s_h, w=s_w).contiguous()
 
         if self.conv_proj_q is not None:
-            t_q_list = []
-            for i, template in enumerate(template_list):
-                t_q = self.conv_proj_q(template)
-                t_q_list.append(t_q)
-
+            # t_q_list = []
+            # for i, template in enumerate(template_list):
+            #     t_q = self.conv_proj_q(template)
+            #     t_q_list.append(t_q)
+            t_q =self.conv_proj_q(template_bank)
+            t_q = rearrange(t_q, '(n b) l c -> b (n l) c', n=n_templates)
             s_q = self.conv_proj_q(search)
-            q = torch.cat(t_q_list + [s_q], dim=1)
+            q = torch.cat( [t_q, s_q], dim=1)
         else:
-            t_q_list = []
-            for i, template in enumerate(template_list):
-                t_q = rearrange(template, 'b c h w -> b (h w) c').contiguous()
-                t_q_list.append(t_q)
-
+            # t_q_list = []
+            # for i, template in enumerate(template_list):
+            #     t_q = rearrange(template, 'b c h w -> b (h w) c').contiguous()
+            #     t_q_list.append(t_q)
+            # t_q = self.conv_proj_q(template_bank)
+            t_q = rearrange(template_bank, '(n b) c h w -> b (n h w) c', n=n_templates)
             s_q = rearrange(search, 'b c h w -> b (h w) c').contiguous()
-            q = torch.cat( t_q_list + [s_q], dim=1)
+            q = torch.cat( [t_q, s_q], dim=1)
 
         if self.conv_proj_k is not None:
-            t_k_list = []
-            for i, template in enumerate(template_list):
-                t_k = self.conv_proj_k(template)
-                t_k_list.append(t_k)
+            # t_k_list = []
+            # for i, template in enumerate(template_list):
+            #     t_k = self.conv_proj_k(template)
+            #     t_k_list.append(t_k)
+            t_k =self.conv_proj_k(template_bank)
+            t_k = rearrange(t_k, '(n b) l c -> b (n l) c', n=n_templates)
             s_k = self.conv_proj_k(search)
-            k = torch.cat(t_k_list + [s_k], dim=1)
+            k = torch.cat([t_k, s_k], dim=1)
         else:
-            t_k_list = []
-            for i, template in enumerate(template_list):
-                t_k = rearrange(template, 'b c h w -> b (h w) c').contiguous()
-                t_k_list.append(t_k)
-
+            # t_k_list = []
+            # for i, template in enumerate(template_list):
+            #     t_k = rearrange(template, 'b c h w -> b (h w) c').contiguous()
+            #     t_k_list.append(t_k)
+            t_k = rearrange(template_bank, '(n b) c h w -> b (n h w) c', n=n_templates)
             s_k = rearrange(search, 'b c h w -> b (h w) c').contiguous()
-            k = torch.cat(t_k_list + [s_k], dim=1)
+            k = torch.cat([t_k, s_k], dim=1)
 
         if self.conv_proj_v is not None:
-            t_v_list = []
-            for i, template in enumerate(template_list):
-                t_v = self.conv_proj_v(template)
-                t_v_list.append(t_v)
-            s_v = self.conv_proj_v(search)
-            v = torch.cat(t_v_list + [s_v], dim=1)
-        else:
-            t_v_list = []
-            for i, template in enumerate(template_list):
-                t_v = rearrange(template, 'b c h w -> b (h w) c').contiguous()
-                t_v_list.append(t_v)
+            # t_v_list = []
+            # for i, template in enumerate(template_list):
+            #     t_v = self.conv_proj_v(template)
+            #     t_v_list.append(t_v)
 
+            t_v =self.conv_proj_v(template_bank)
+            t_v = rearrange(t_v, '(n b) l c -> b (n l) c', n=n_templates)
+            s_v = self.conv_proj_v(search)
+            v = torch.cat([t_v, s_v], dim=1)
+        else:
+            # t_v_list = []
+            # for i, template in enumerate(template_list):
+            #     t_v = rearrange(template, 'b c h w -> b (h w) c').contiguous()
+            #     t_v_list.append(t_v)
+            t_v = rearrange(template_bank, '(n b) c h w -> b (n h w) c', n=n_templates)
             s_v = rearrange(search, 'b c h w -> b (h w) c').contiguous()
-            v = torch.cat(t_v_list + [s_v], dim=1)
+            v = torch.cat([t_v, s_v], dim=1)
 
         return q, k, v
 
@@ -537,33 +542,36 @@ class VisionTransformer(BaseModule):
         # B, C, H, W = x.size()
 
         # number of templates
-        n_templates = len(template_bank)
-        template_list = []
-        for i , template in enumerate(template_bank):
-            template = self.patch_embed(template)
-            template_list.append(template)
+        n_cls = len(template_bank)
+        # template_list = []
+        # for i , template in enumerate(template_bank):
+        #     template = self.patch_embed(template)
+        #     template_list.append(template)
+        template_bank = rearrange(template_bank, 'n b c h w -> (n b) c h w')
+        template = self.patch_embed(template_bank)
 
         t_B, t_C, t_H, t_W = template.size()
         search = self.patch_embed(search)
         s_B, s_C, s_H, s_W = search.size()
 
-        for i , template in enumerate(template_list):
-            template_list[i] = rearrange(template, 'b c h w -> b (h w) c').contiguous()
+        # for i , template in enumerate(template_list):
+        #     template_list[i] = rearrange(template, 'b c h w -> b (h w) c').contiguous()
+
+        template = rearrange(template, '(n b) c h w -> b (n h w) c', n = n_cls)
 
         search = rearrange(search, 'b c h w -> b (h w) c').contiguous()
 
 
-        x = torch.cat(template_list+[search], dim=1)
+        x = torch.cat([template, search], dim=1)
 
         x = self.pos_drop(x)
 
         for i, blk in enumerate(self.blocks):
-            x = blk(x, n_templates, t_H, t_W, s_H, s_W)
+            x = blk(x, n_cls, t_H, t_W, s_H, s_W)
 
-        # if self.cls_token is not None:
-        #     cls_tokens, x = torch.split(x, [1, H*W], 1)
-        template_bank, search = torch.split(x, [n_templates * t_H * t_W, s_H*s_W], dim=1)
-        template_bank = rearrange(template_bank, 'b (n h w) c -> n b c h w', h=t_H, n=n_templates).contiguous()
+
+        template_bank, search = torch.split(x, [n_cls * t_H * t_W, s_H*s_W], dim=1)
+        template_bank = rearrange(template_bank, 'b (n h w) c -> n b c h w', h=t_H, n=n_cls).contiguous()
         search = rearrange(search, 'b (h w) c -> b c h w', h=s_H, w=s_W).contiguous()
 
         return template_bank, search

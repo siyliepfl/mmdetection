@@ -18,7 +18,7 @@ from .xml_style import XMLDataset
 from .coco_oneshot import CocoOneShotDataset
 from .coco_fewshot import CocoFewShotDataset
 from .voc_oneshot import VocOneShotDataset
-
+from .voc_moneshot import VocMultiOneShotDataset
 __all__ = [
     'CustomDataset', 'XMLDataset', 'CocoDataset', 'DeepFashionDataset',
     'VOCDataset', 'CityscapesDataset', 'LVISDataset', 'LVISV05Dataset',
@@ -27,6 +27,6 @@ __all__ = [
     'ClassBalancedDataset', 'WIDERFaceDataset', 'DATASETS', 'PIPELINES',
     'build_dataset', 'replace_ImageToTensor', 'get_loading_pipeline',
     'NumClassCheckHook', 'CocoPanopticDataset', 'MultiImageMixDataset',
-    'OpenImagesDataset', 'OpenImagesChallengeDataset', 'CocoOneShotDataset','CocoFewShotDataset'
-    'VocOneShotDataset'
+    'OpenImagesDataset', 'OpenImagesChallengeDataset', 'CocoOneShotDataset','CocoFewShotDataset',
+    'VocOneShotDataset', 'VocMultiOneShotDataset'
 ]

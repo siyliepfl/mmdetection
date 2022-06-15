@@ -15,7 +15,7 @@ INF = 1e8
 
 
 @HEADS.register_module()
-class MAdetHead(AnchorFreeHead):
+class ConvAdetHead(AnchorFreeHead):
     """Anchor-free head used in `FCOS <https://arxiv.org/abs/1904.01355>`_.
 
     The FCOS head does not use anchor boxes. Instead bounding boxes are
@@ -104,12 +104,15 @@ class MAdetHead(AnchorFreeHead):
             **kwargs)
         self.loss_centerness = build_loss(loss_centerness)
 
-        self.conv_cls= nn.ModuleList(
-            [ConvModule(384, 256, 3, stride=1, padding=1, norm_cfg=self.norm_cfg),
-             ConvModule(256, 256, 3, stride=1, padding=1, norm_cfg=self.norm_cfg),
-             nn.Conv2d(256, 256, kernel_size=3, padding=1),
-             ]
+        self.template_conv= nn.ModuleList(
+            [
+            ConvModule(384, 256, 3, stride=2, padding=1, norm_cfg=self.norm_cfg),
+             ConvModule(256, 256, 3, stride=2, padding=1, norm_cfg=self.norm_cfg),
+             ConvModule(256, 256, 3, stride=2, padding=1, norm_cfg=self.norm_cfg),
+             nn.Conv2d(256, (256 * 8 * 9+ 8 * 8 * 9 + 8 * 1) + (8 + 8 + 1), kernel_size=1),
+        ]
         )
+
 
     def _init_layers(self):
         """Initialize layers of the head."""
@@ -202,14 +205,49 @@ class MAdetHead(AnchorFreeHead):
 
         for cls_layer in self.cls_convs:
             cls_feat = cls_layer(cls_feat)
-        n_cls = len(conv_kernel)
-        conv_kernel = rearrange(conv_kernel, 'n b c h w -> (n b) c h w')
-        for conv_layer in self.conv_cls:
-            conv_kernel = conv_layer(conv_kernel)
-        # check
-        conv_kernel = rearrange(conv_kernel, '(n b) c h w -> n b c h w', n=n_cls)[:, 0, ...]
 
-        cls_score = nn.functional.conv2d(cls_feat, conv_kernel, stride=1, padding=1)
+        cls_score_list = []
+        for conv_layer in self.template_conv:
+            conv_kernel = conv_layer(conv_kernel)
+
+        ## generate one conv layer
+        # bs = len(conv_kernel)
+        # conv_kernel, conv_bias = torch.split(conv_kernel, [256 * 3 * 3, 1], dim=1)
+        # conv_kernel = conv_kernel.reshape((bs, 256, 3, 3)).unsqueeze(1)
+        # conv_bias = conv_bias.reshape((bs, -1))
+        #
+        # for i in range(bs):
+        #     cls_score_tensor = nn.functional.conv2d(cls_feat[i].unsqueeze(0),
+        #                                             conv_kernel[i], stride=1, padding=1, bias=conv_bias[i])
+        #     cls_score_list.append(cls_score_tensor)
+
+        ## generate several conv layers
+        bs = len(conv_kernel)
+        conv_kernel_1, conv_kernel_2, conv_kernel_3, \
+            conv_bias_1, conv_bias_2, conv_bias_3 = torch.split(conv_kernel, [256*8*9, 8*8*9, 8*1, 8, 8, 1], dim=1)
+        conv_kernel_list = [conv_kernel_1.reshape((bs, 8, 256, 3, 3)),
+                            conv_kernel_2.reshape((bs, 8, 8, 3, 3)),
+                            conv_kernel_3.reshape((bs, 1, 8, 1, 1))]
+        conv_bias_list = [conv_bias_1.reshape((bs, -1)),
+                          conv_bias_2.reshape((bs, -1)),
+                          conv_bias_3.reshape((bs, -1))]
+
+        for i in range(bs):
+            cls_score_tensor = cls_feat[i].unsqueeze(0)
+
+            for j, (w, b) in enumerate(zip(conv_kernel_list, conv_bias_list)):
+                if j < len(conv_kernel_list) - 1:
+                    cls_score_tensor = nn.functional.conv2d(cls_score_tensor,
+                                                            w[i], stride=1, padding=1, bias=b[i])
+                    cls_score_tensor = nn.functional.relu(cls_score_tensor, inplace=True)
+                else:
+                    cls_score_tensor = nn.functional.conv2d(cls_score_tensor,
+                                                            w[i], stride=1, bias=b[i])
+
+
+            cls_score_list.append(cls_score_tensor)
+
+        cls_score = torch.cat(cls_score_list, dim=0)
 
         for reg_layer in self.reg_convs:
             reg_feat = reg_layer(reg_feat)

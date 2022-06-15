@@ -40,6 +40,9 @@ from .yolo_head import YOLOV3Head
 from .yolof_head import YOLOFHead
 from .yolox_head import YOLOXHead
 from .madet_head import MAdetHead
+from .convadet_head import ConvAdetHead
+from .convadet_head_v2 import ConvAdetHeadV2
+from .ndet_mask2former_head import NdetMask2FormerHead
 __all__ = [
     'AnchorFreeHead', 'AnchorHead', 'GuidedAnchorHead', 'FeatureAdaption',
     'RPNHead', 'GARPNHead', 'RetinaHead', 'RetinaSepBNHead', 'GARetinaHead',
@@ -52,5 +55,5 @@ __all__ = [
     'AutoAssignHead', 'DETRHead', 'YOLOFHead', 'DeformableDETRHead',
     'SOLOHead', 'DecoupledSOLOHead', 'CenterNetHead', 'YOLOXHead',
     'DecoupledSOLOLightHead', 'LADHead', 'TOODHead', 'MaskFormerHead',
-    'Mask2FormerHead', 'MAdetHead'
+    'Mask2FormerHead', 'MAdetHead', 'ConvAdetHead', 'ConvAdetHeadV2','NdetMask2FormerHead'
 ]

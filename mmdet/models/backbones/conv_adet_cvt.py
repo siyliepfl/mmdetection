@@ -44,12 +44,6 @@ class LayerNorm(nn.LayerNorm):
         ret = super().forward(x.type(torch.float32))
         return ret.type(orig_type)
 
-@ACTIVATION_LAYERS.register_module()
-class QuickGELU(BaseModule):
-    def forward(self, x: torch.Tensor):
-        return x * torch.sigmoid(1.702 * x)
-
-@NORM_LAYERS.register_module()
 class FrozenBatchNorm2d(BaseModule):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
@@ -129,6 +123,7 @@ class Attention(BaseModule):
                  padding_q=1,
                  with_cls_token=True,
                  freeze_bn=False,
+                 cross_att='img',
                  **kwargs
                  ):
         super().__init__()
@@ -139,6 +134,7 @@ class Attention(BaseModule):
         # head_dim = self.qkv_dim // num_heads
         self.scale = dim_out ** -0.5
         self.with_cls_token = with_cls_token
+        self.cross_att = cross_att
         if freeze_bn:
             conv_proj_post_norm = FrozenBatchNorm2d
         else:
@@ -286,19 +282,52 @@ class Attention(BaseModule):
         k_mt, k_s = torch.split(k, [((t_h + 1) // 2) ** 2 , s_h * s_w // 4], dim=2)
         v_mt, v_s = torch.split(v, [((t_h + 1) // 2) ** 2 ,  s_h * s_w // 4], dim=2)
 
-        # template attention
-        attn_score = torch.einsum('bhlk, bhtk->bhlt', [q_mt, k_mt]) * self.scale
-        attn = F.softmax(attn_score, dim=-1)
-        attn = self.attn_drop(attn)
-        x_mt = torch.einsum('bhlt, bhtv->bhlv', [attn, v_mt])
-        x_mt = rearrange(x_mt, 'b h t d -> b t (h d)')
 
-        # search region attention
-        attn_score = torch.einsum('bhlk, bhtk->bhlt', [q_s, k]) * self.scale
-        attn = F.softmax(attn_score, dim=-1)
-        attn = self.attn_drop(attn)
-        x_s = torch.einsum('bhlt, bhtv->bhlv', [attn, v])
-        x_s = rearrange(x_s, 'b h t d -> b t (h d)')
+        if self.cross_att == 'all':
+            # template attention
+            attn_score = torch.einsum('bhlk, bhtk->bhlt', [q_mt, k]) * self.scale
+            attn = F.softmax(attn_score, dim=-1)
+            attn = self.attn_drop(attn)
+            x_mt = torch.einsum('bhlt, bhtv->bhlv', [attn, v])
+            x_mt = rearrange(x_mt, 'b h t d -> b t (h d)')
+
+            # search region attention
+            attn_score = torch.einsum('bhlk, bhtk->bhlt', [q_s, k]) * self.scale
+            attn = F.softmax(attn_score, dim=-1)
+            attn = self.attn_drop(attn)
+            x_s = torch.einsum('bhlt, bhtv->bhlv', [attn, v])
+            x_s = rearrange(x_s, 'b h t d -> b t (h d)')
+
+        elif self.cross_att == 'img':
+            # template attention
+            attn_score = torch.einsum('bhlk, bhtk->bhlt', [q_mt, k_mt]) * self.scale
+            attn = F.softmax(attn_score, dim=-1)
+            attn = self.attn_drop(attn)
+            x_mt = torch.einsum('bhlt, bhtv->bhlv', [attn, v_mt])
+            x_mt = rearrange(x_mt, 'b h t d -> b t (h d)')
+
+            # search region attention
+            attn_score = torch.einsum('bhlk, bhtk->bhlt', [q_s, k]) * self.scale
+            attn = F.softmax(attn_score, dim=-1)
+            attn = self.attn_drop(attn)
+            x_s = torch.einsum('bhlt, bhtv->bhlv', [attn, v])
+            x_s = rearrange(x_s, 'b h t d -> b t (h d)')
+
+        elif self.cross_att == 'no':
+            # template attention
+            attn_score = torch.einsum('bhlk, bhtk->bhlt', [q_mt, k_mt]) * self.scale
+            attn = F.softmax(attn_score, dim=-1)
+            attn = self.attn_drop(attn)
+            x_mt = torch.einsum('bhlt, bhtv->bhlv', [attn, v_mt])
+            x_mt = rearrange(x_mt, 'b h t d -> b t (h d)')
+
+            # search region attention
+            attn_score = torch.einsum('bhlk, bhtk->bhlt', [q_s, k_s]) * self.scale
+            attn = F.softmax(attn_score, dim=-1)
+            attn = self.attn_drop(attn)
+            x_s = torch.einsum('bhlt, bhtv->bhlv', [attn, v_s])
+            x_s = rearrange(x_s, 'b h t d -> b t (h d)')
+
 
         x = torch.cat([x_mt, x_s], dim=1)
 
@@ -348,14 +377,16 @@ class Block(BaseModule):
                  act_layer=nn.GELU,
                  norm_layer=nn.LayerNorm,
                  freeze_bn=False,
+                 cross_att='img',
                  **kwargs):
         super().__init__()
 
         self.with_cls_token = kwargs['with_cls_token']
 
         self.norm1 = norm_layer(dim_in)
+
         self.attn = Attention(
-            dim_in, dim_out, num_heads, qkv_bias, attn_drop, drop, freeze_bn=freeze_bn,
+            dim_in, dim_out, num_heads, qkv_bias, attn_drop, drop, freeze_bn=freeze_bn, cross_att=cross_att,
             **kwargs
         )
 
@@ -448,6 +479,7 @@ class VisionTransformer(BaseModule):
                  norm_layer=nn.LayerNorm,
                  init='trunc_norm',
                  freeze_bn=False,
+                 cross_att='img',
                  **kwargs):
         super().__init__()
         self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
@@ -490,6 +522,7 @@ class VisionTransformer(BaseModule):
                     act_layer=act_layer,
                     norm_layer=norm_layer,
                     freeze_bn=freeze_bn,
+                    cross_att=cross_att,
                     **kwargs
                 )
             )
@@ -580,7 +613,7 @@ class VisionTransformer(BaseModule):
 
 
 @BACKBONES.register_module()
-class CvTAdet(BaseModule):
+class ConvCvTAdet(BaseModule):
     def __init__(self,
                  in_chans=3,
                  # num_classes=1000,
@@ -616,6 +649,7 @@ class CvTAdet(BaseModule):
                 'stride_kv': spec['STRIDE_KV'][i],
                 'stride_q': spec['STRIDE_Q'][i],
                 'freeze_bn': spec['FREEZE_BN'],
+                'cross_att':spec['CROSS_ATT']
             }
 
             stage = VisionTransformer(
@@ -634,8 +668,8 @@ class CvTAdet(BaseModule):
         self.cls_token = spec['CLS_TOKEN'][-1]
 
         # Classifier head
-        self.head = nn.Linear(dim_embed, 1000)
-        trunc_normal_(self.head.weight, std=0.02)
+        # self.head = nn.Linear(dim_embed, 1000)
+        # trunc_normal_(self.head.weight, std=0.02)
 
     def forward(self, template, search):
         """

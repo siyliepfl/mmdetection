@@ -1,5 +1,5 @@
 # dataset settings
-dataset_type = 'VocOneShotDataset'
+dataset_type = 'VocMultiOneShotDataset'
 data_root = 'data/voc/'
 img_norm_cfg = dict(
     mean=[102.9801, 115.9465, 122.7717], std=[1.0, 1.0, 1.0], to_rgb=False)
@@ -17,8 +17,8 @@ train_pipeline = [
     dict(type='Normalize', **img_norm_cfg),
     dict(type='Pad', pad_to_square=True, pad_val=dict(img=(114.0, 114.0, 114.0))),
     dict(type='DefaultFormatBundle'),
-    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels', 'query_img',
-                               'query_labels', 'query_targets']),
+    dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels', 'query_img_list',
+                               'query_labels_list', 'query_targets_list']),
 ]
 
 query_train_pipeline = [

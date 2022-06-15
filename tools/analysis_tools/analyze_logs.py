@@ -32,7 +32,6 @@ def cal_train_time(log_dicts, args):
               f'average time is {epoch_ave_time[fastest_epoch]:.4f}')
         print(f'time std over epochs is {std_over_epoch:.4f}')
         print(f'average iter time: {np.mean(all_times):.4f} s/iter')
-        print()
 
 
 def plot_curve(log_dicts, args):
@@ -54,6 +53,7 @@ def plot_curve(log_dicts, args):
         epochs = list(log_dict.keys())
         for j, metric in enumerate(metrics):
             print(f'plot curve of {args.json_logs[i]}, metric is {metric}')
+            print(f'start epoch is {args.start_epoch}')
             if metric not in log_dict[epochs[int(args.start_epoch) - 1]]:
                 if 'mAP' in metric:
                     raise KeyError(
@@ -80,7 +80,8 @@ def plot_curve(log_dicts, args):
                 xs = []
                 ys = []
                 num_iters_per_epoch = log_dict[epochs[0]]['iter'][-2]
-                for epoch in epochs:
+                start_idx = epochs.index(int(args.start_epoch))
+                for epoch in epochs[start_idx:]:
                     iters = log_dict[epoch]['iter']
                     if log_dict[epoch]['mode'][-1] == 'val':
                         iters = iters[:-1]
