@@ -82,7 +82,7 @@ model = dict(
     #     batch_nms_cfg = dict(
     #         iou_thr=0.5,
     #     ),
-    #     max_per_img=100
+    #     max_per_img=50
     # )
 )
 
@@ -103,8 +103,7 @@ dist_params = dict(backend='nccl')
 log_level = 'INFO'
 resume_from = None
 workflow = [('train', 1)]
-evaluation = dict(jsonfile_prefix='results/adet_cvt13/',
-classwise=True, interval=1)
+evaluation = dict(classwise=True, interval=1, start=16)
 # disable opencv multithreading to avoid system being overloaded
 opencv_num_threads = 0
 # set multi-process start method as `fork` to speed up the training

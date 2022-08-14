@@ -1,7 +1,6 @@
 import random
 from mmdet.datasets import PIPELINES
 import cv2 as cv
-import torch.nn.functional as F
 import math
 import numpy as np
 

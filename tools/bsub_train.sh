@@ -21,10 +21,10 @@ if [ -z "$9" ]; then
     GPUN="NVIDIAGeForceRTX2080Ti"
 fi
 
-echo bsub -n ${CORE} -W $TIME:00 -J $NAME -oo $FOLDER$NAME$LOG \
+echo bsub -n ${CORE} -W $TIME:00 -J $NAME -oo $NAME$LOG \
     -R "rusage[mem=${MEM},ngpus_excl_p=${GPUS}]" \
     -R "select[gpu_model0==${GPUN}]" \
-    "./tools/dist_train.Unix.sh ${CONFIG} ${GPUS} ${PORT} ${COMMAND}"
+    "PORT=${PORT} ./tools/dist_train.sh ${CONFIG} ${GPUS} ${COMMAND}"
 
 bsub -n ${CORE} -W $TIME:00 -J $NAME -oo $NAME$LOG \
     -R "rusage[mem=${MEM},ngpus_excl_p=${GPUS}]" \

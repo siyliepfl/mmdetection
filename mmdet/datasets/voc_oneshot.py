@@ -1,5 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 import contextlib
+import copy
 import io
 import itertools
 import json
@@ -22,6 +23,67 @@ from .builder import DATASETS
 from .custom import CustomDataset
 from .pipelines import Compose
 import random
+from PIL import ImageFilter, Image
+from mmdet.models.utils.box_ops import box_xywh_to_xyxy
+from torchvision.transforms import transforms
+from mmdet.core.evaluation.bbox_overlaps import bbox_overlaps
+
+from mmcv.image.photometric import *
+from mmdet.core.visualization import imshow_det_bboxes
+import matplotlib.pyplot as plt
+
+def debug_plot(data):
+    img_ori = imdenormalize(np.array(data['img'].data.permute(1, 2, 0)),
+                            mean=np.array([123.675, 116.28, 103.53]),
+                            std=np.array([58.395, 57.12, 57.375]))
+    crop_im = imshow_det_bboxes(img_ori,
+                                np.array(data['query_targets'].data).reshape(-1,4),
+                                np.array([0]),
+                                segms=None)
+
+    qimg_ori = imdenormalize(np.array(data['query_img'].data.permute(1, 2, 0)),
+                             mean=np.array([123.675, 116.28, 103.53]),
+                             std=np.array([58.395, 57.12, 57.375]))
+
+    plt.imshow(qimg_ori/255)
+    plt.show()
+
+def get_random_patch_from_img(im_size, gt_bboxes=None, min_pixel=8, bg_gt_overlap_iou=0.3):
+
+    """
+    :param img: original image
+    :param min_pixel: min pixels of the query patch
+    :return: query_patch,x,y,w,h
+    """
+    while True:
+        h, w = im_size
+        min_w, max_w = min_pixel, w - min_pixel
+        min_h, max_h = min_pixel, h - min_pixel
+        sw, sh = np.random.randint(min_w, max_w + 1), np.random.randint(min_h, max_h + 1)
+        x, y = np.random.randint(w - sw) if sw != w else 0, np.random.randint(h - sh) if sh != h else 0
+
+        bbox = torch.tensor([x, y, sw, sh])
+        if gt_bboxes is not None:
+            ious = bbox_overlaps(np.array(gt_bboxes), np.array(box_xywh_to_xyxy(bbox)).reshape(-1, 4))
+            if (ious > bg_gt_overlap_iou).any():
+                continue
+            else:
+                return x, y, sw, sh
+
+        return  x, y, sw, sh
+
+
+
+class GaussianBlur(object):
+    """Gaussian blur augmentation in SimCLR https://arxiv.org/abs/2002.05709"""
+
+    def __init__(self, sigma=[.1, 2.]):
+        self.sigma = sigma
+
+    def __call__(self, x):
+        sigma = random.uniform(self.sigma[0], self.sigma[1])
+        x = x.filter(ImageFilter.GaussianBlur(radius=sigma))
+        return x
 
 @DATASETS.register_module()
 class VocOneShotDataset(CustomDataset):
@@ -37,12 +99,15 @@ class VocOneShotDataset(CustomDataset):
                (182, 182, 255), (0, 0, 230), (220, 20, 60), (163, 255, 0),
                (0, 82, 0), (3, 95, 161), (0, 80, 100), (183, 130, 88)]
 
-    def __init__(self, query_pipeline,
+    def __init__(self,
+                 query_pipeline,
                  split=0,
                  average_num=1,
                  query_json=None,
                  no_test_class_present=False,
                  test_type='oneshot',
+                 bg_crop_freq=0.25,
+                 bg_gt_overlap_iou = 1,
                  **kwargs):
         """
         Args:
@@ -63,9 +128,19 @@ class VocOneShotDataset(CustomDataset):
 
         self.query_json = query_json
         self.label2cat = {y:x for x,y in self.cat2label.items()}
-        self.transform_pipeline = Compose(kwargs['pipeline'][:-1])
-        self.collect_pipeline = Compose([kwargs['pipeline'][-1]])
+        if self.test_mode:
+            self.pipeline = Compose(kwargs['pipeline'])
+        else:
+            self.load_pipeline = Compose(kwargs['pipeline'][:2])
+            self.transform_pipeline = Compose(kwargs['pipeline'][2:-1])
+            bg_transform_pipeline = copy.deepcopy(kwargs['pipeline'][2:-1])
+            bg_transform_pipeline[1] = dict(type='RandomFlip', flip_ratio=0.0)
+            self.bg_transform_pipeline = Compose(bg_transform_pipeline)
+            self.collect_pipeline = Compose([kwargs['pipeline'][-1]])
         self.query_pipeline = Compose(query_pipeline)
+
+        self.bg_query_pipeline = self.get_query_transforms()
+
         self.avg_num = average_num
         self.split = split
         self.no_test_class_present = no_test_class_present
@@ -74,10 +149,28 @@ class VocOneShotDataset(CustomDataset):
                                  self.CLASSES.index('sheep'),
                                  self.CLASSES.index('cat'),
                                  self.CLASSES.index('aeroplane')]
+
         self.known_cats_ids = list(set(self.cat_ids) - set(self.unknown_cats_ids))
         self.known_cats_labels = self.known_cats_ids
         self.unknown_cats_labels = self.unknown_cats_ids
         self.test_type = test_type
+        self.bg_crop_freq = bg_crop_freq
+        self.bg_gt_overlap_iou = bg_gt_overlap_iou
+
+    def get_query_transforms(self):
+        # SimCLR style augmentation
+        return transforms.Compose([
+            transforms.Resize((128, 128)),
+            transforms.RandomApply([
+                transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
+            ], p=0.8),
+            transforms.RandomGrayscale(p=0.2),
+            transforms.RandomApply([GaussianBlur([.1, 2.])], p=0.5),
+            transforms.ToTensor(),
+            # transforms.RandomHorizontalFlip(),  HorizontalFlip may cause the pretext too difficult, so we remove it
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
+        ])
 
     def build_query_bank_from_files(self, query_json):
 
@@ -142,8 +235,6 @@ class VocOneShotDataset(CustomDataset):
         while query_data is None:
             query_anno = anno_list[random.randint(0, len(anno_list) - 1)]
             query_img_id = query_anno['image_id']
-            # query_idx = self.img_ids.index(query_img_id)
-
             query_data = self.prepare_query_img(query_anno, query_img_id)
 
         query_label_id = self.cat2label[query_cat_id]
@@ -179,7 +270,7 @@ class VocOneShotDataset(CustomDataset):
 
         return query_res
 
-    def prepare_train_img(self, idx):
+    def load_train_img(self, idx):
         """Get training data and annotations after pipeline.
 
         Args:
@@ -196,7 +287,9 @@ class VocOneShotDataset(CustomDataset):
         if self.proposals is not None:
             results['proposals'] = self.proposals[idx]
         self.pre_pipeline(results)
-        return self.transform_pipeline(results)
+        return self.load_pipeline(results)
+
+
 
     def check_train_img(self, idx):
 
@@ -231,6 +324,32 @@ class VocOneShotDataset(CustomDataset):
 
             return idx, query_cat_id, anno_list
 
+    def generate_self_det_query_img(self, data):
+
+
+        img_info = data['img_info']
+        pil_img = Image.fromarray(data['img'])
+        results = dict(img_info=img_info,
+                       img=data['img'])
+        self.pre_pipeline(results)
+        bbox = get_random_patch_from_img(im_size = data['img_shape'][:2],
+                                         gt_bboxes=data['gt_bboxes'].data,
+                                         bg_gt_overlap_iou=self.bg_gt_overlap_iou)
+        x, y, sw, sh = bbox
+        data['gt_bboxes'] = np.array(box_xywh_to_xyxy(torch.tensor(bbox, dtype=torch.float)).unsqueeze(0))
+        query_img = pil_img.crop((x, y, x + sw, y + sh))
+        query_img = self.bg_query_pipeline(query_img)
+        data['query_img'] = DataContainer(query_img, stack=True)
+
+        return data
+
+    def generate_self_det_target_bboxes(self, data):
+
+        data = self.bg_transform_pipeline(data)
+        data['query_targets'] = data['gt_bboxes']
+        data['query_labels'] = DataContainer(torch.zeros(1).long())
+
+        return data
 
     def __getitem__(self, idx):
         """Get training/test data after pipeline.
@@ -246,16 +365,28 @@ class VocOneShotDataset(CustomDataset):
         if self.test_mode:
             return self.prepare_test_img(idx)
         while True:
+            # perform random background crop
 
-            idx, query_cat_id, query_ann_list = self.check_train_img(idx)
-            data = self.prepare_train_img(idx)
-            if data is None:
-                idx = self._rand_another(idx)
-                continue
+            if random.random() < self.bg_crop_freq:
+                data = self.load_train_img(idx)
+                if data is None:
+                    idx = self._rand_another(idx)
+                    continue
+                data = self.generate_self_det_query_img(data)
+                data = self.generate_self_det_target_bboxes(data)
+                data = self.collect_pipeline(data)
+                return data
 
-            data = self.generate_oneshot_data(data, query_cat_id, query_ann_list)
-            data = self.collect_pipeline(data)
-            return data
+            else:
+                idx, query_cat_id, query_ann_list = self.check_train_img(idx)
+                data = self.load_train_img(idx)
+                if data is None:
+                    idx = self._rand_another(idx)
+                    continue
+                data = self.transform_pipeline(data)
+                data = self.generate_oneshot_data(data, query_cat_id, query_ann_list)
+                data = self.collect_pipeline(data)
+                return data
 
     def prepare_query_test_img(self, im_id, query_cat_labels, per_cat_num=2):
         """Get training data and annotations after pipeline.

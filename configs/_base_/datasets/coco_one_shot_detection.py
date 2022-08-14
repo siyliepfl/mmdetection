@@ -2,7 +2,7 @@
 dataset_type = 'CocoOneShotDataset'
 data_root = 'data/lvis/'
 img_norm_cfg = dict(
-    mean=[102.9801, 115.9465, 122.7717], std=[1.0, 1.0, 1.0], to_rgb=False)
+    mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 
 train_pipeline = [
     dict(
@@ -15,7 +15,7 @@ train_pipeline = [
     dict(type='Resize', img_scale=(640, 640), keep_ratio=True),
     dict(type='RandomFlip', flip_ratio=0.5),
     dict(type='Normalize', **img_norm_cfg),
-    dict(type='Pad', pad_to_square=True, pad_val=dict(img=(114.0, 114.0, 114.0))),
+    dict(type='Pad', pad_to_square=True),
     dict(type='DefaultFormatBundle'),
     dict(type='Collect', keys=['img', 'gt_bboxes', 'gt_labels', 'query_img',
                                'query_labels', 'query_targets']),
@@ -85,6 +85,8 @@ data = dict(
         query_pipeline=query_train_pipeline,
         average_num = average_num,
         split=split,
+        bg_crop_freq=0,
+        bg_gt_overlap_iou=0.3,
         # no_test_class_present=True,
 
     ),

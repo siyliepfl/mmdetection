@@ -1,5 +1,5 @@
 _base_ = [
-    '../_base_/datasets/voc_one_shot_detection.py',
+    '../_base_/datasets/lvis_one_shot_detection.py',
     '../_base_/schedules/schedule_2x.py',
     # '../_base_/default_runtime.py'
 ]
@@ -70,7 +70,6 @@ model = dict(
         allowed_border=-1,
         pos_weight=-1,
         debug=False),
-
     test_cfg=dict(
         nms_pre=1000,
         min_bbox_size=0,
@@ -78,13 +77,13 @@ model = dict(
         nms=dict(type='nms', iou_threshold=0.5),
         max_per_img=100),
 
-    nms_cfg=dict(
-        class_agnostic=True,
-        batch_nms_cfg = dict(
-            iou_thr=0.5,
-        ),
-        max_per_img=50
-    )
+    # nms_cfg=dict(
+    #     class_agnostic=True,
+    #     batch_nms_cfg = dict(
+    #         iou_thr=0.5,
+    #     ),
+    #     max_per_img=50
+    # )
 )
 
 optimizer = dict(type='SGD', lr=0.002, momentum=0.9, weight_decay=0.0001)
@@ -104,7 +103,7 @@ dist_params = dict(backend='nccl')
 log_level = 'INFO'
 resume_from = None
 workflow = [('train', 1)]
-evaluation = dict(interval=1, start=16)
+evaluation = dict(classwise=True, interval=1, start=16)
 # disable opencv multithreading to avoid system being overloaded
 opencv_num_threads = 0
 # set multi-process start method as `fork` to speed up the training

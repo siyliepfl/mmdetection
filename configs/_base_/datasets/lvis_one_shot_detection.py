@@ -1,6 +1,6 @@
 # dataset settings
-dataset_type = 'VocOneShotDataset'
-data_root = 'data/voc/'
+dataset_type = 'LVISV1OneShotDataset'
+data_root = 'data/lvis/'
 img_norm_cfg = dict(
     mean=[123.675, 116.28, 103.53], std=[58.395, 57.12, 57.375], to_rgb=True)
 
@@ -8,7 +8,7 @@ train_pipeline = [
     dict(
         type='LoadImageFromFile',
         file_client_args=dict(
-            img_db_path='data/voc/voc_0712_imgs.h5',
+            img_db_path='data/lvis/train_imgs.hdf5',
             backend='hdf5',
             type='lvis')),
     dict(type='LoadAnnotations', with_bbox=True),
@@ -25,7 +25,7 @@ query_train_pipeline = [
     dict(
         type='LoadImageFromFile',
         file_client_args=dict(
-            img_db_path='data/voc/voc_0712_imgs.h5',
+            img_db_path='data/lvis/train_imgs.hdf5',
             backend='hdf5',
             type='lvis')),
 dict(type='SampleTarget', output_sz=128, search_area_factor=1),
@@ -35,29 +35,11 @@ dict(type='DefaultFormatBundle'),
 dict(type='Collect', keys=['img']),
 ]
 
-
-
-
-# bg_query_train_pipeline = [
-#     dict(
-#         type='LoadImageFromFile',
-#         file_client_args=dict(
-#             img_db_path='data/voc/voc_0712_imgs.h5',
-#             backend='hdf5',
-#             type='lvis')),
-# dict(type='SampleTarget', output_sz=128, search_area_factor=1),
-# dict(type='PhotoMetricDistortion'),
-# dict(type='RandomFlip', flip_ratio=0.5),
-# dict(type='Normalize', **img_norm_cfg),
-# dict(type='DefaultFormatBundle'),
-# dict(type='Collect', keys=['img']),
-# ]
-
 query_test_pipeline = [
     dict(
         type='LoadImageFromFile',
         file_client_args=dict(
-            img_db_path='data/voc/voc_0712_imgs.h5',
+            img_db_path='data/lvis/train_imgs.hdf5',
             backend='hdf5',
             type='lvis')),
     dict(type='SampleTarget', output_sz=128, search_area_factor=1),
@@ -71,7 +53,7 @@ test_pipeline = [
     dict(
         type='LoadImageFromFile',
         file_client_args=dict(
-            img_db_path='data/voc/voc_0712_imgs.h5',
+            img_db_path='data/lvis/val2017.h5',
             backend='hdf5',
             type='lvis')),
     dict(type='LoadAnnotations', with_bbox=True),
@@ -96,35 +78,37 @@ data = dict(
     workers_per_gpu=2,
     train=dict(
         type=dataset_type,
-        ann_file=data_root + '/voc0712_train.json',
-        img_prefix=data_root,
+        # classes = data_root + f'oneshot/train_split_{str(split)}.txt',
+        ann_file=data_root + 'annotations/lvis_v1_train.json',
+        img_prefix=data_root + 'train2017/',
         pipeline=train_pipeline,
         query_pipeline=query_train_pipeline,
         average_num = average_num,
         split=split,
-        bg_crop_freq=0.5,
+        bg_crop_freq=0,
         bg_gt_overlap_iou=0.3,
+        # no_test_class_present=True,
+
     ),
     val=dict(
         type=dataset_type,
-        ann_file=data_root + '/voc07_test.json',
-        img_prefix=data_root,
+        ann_file=data_root + 'annotations/lvis_v1_val.json',
+        img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline,
         query_pipeline=query_test_pipeline,
     average_num = average_num,
     split=split,
-    query_json = data_root + '/voc0712_train.json',
+    query_json = data_root + 'annotations/lvis_v1_train.json',
     ),
     test=dict(
         type=dataset_type,
         # classes = data_root + 'oneshot/test_split_0.txt',
-        ann_file=data_root + 'voc07_test.json',
-        img_prefix=data_root,
+        ann_file=data_root + 'annotations/lvis_v1_val.json',
+        img_prefix=data_root + 'val2017/',
         pipeline=test_pipeline,
         query_pipeline=query_test_pipeline,
     average_num = average_num,
     split=split,
-    query_json = data_root + 'voc0712_train.json',
-    test_type = 'oneshot'
+    query_json = data_root + 'annotations/lvis_v1_train.json',
     ))
-evaluation = dict(interval=1, metric='mAP')
+evaluation = dict(interval=1, metric='bbox')
